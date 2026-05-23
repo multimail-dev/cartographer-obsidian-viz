@@ -1,0 +1,12 @@
+{
+  "name": "@vault-graph/atlas-ui",
+  "version": "0.1.0",
+  "description": "Cartographer / Atlas UI — Sigma.js graph explorer. Browser source built into workers/vault-mcp/public/dist by bun build + scripts/sync-artifacts.ts.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/frontend/app.ts src/frontend/fa3-worker.ts --outdir ../../workers/vault-mcp/public/dist --target browser --minify && bun run scripts/sync-artifacts.ts",
+    "bench": "bun run bench/layout.ts",
+    "test": "bun test tests/"
+  }
+}

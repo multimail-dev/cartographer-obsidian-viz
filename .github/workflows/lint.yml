@@ -1,0 +1,86 @@
+name: Lint
+on: [pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No secrets in source files
+        run: |
+          echo "Checking for leaked secrets..."
+          FOUND=0
+          for pattern in "Bearer [a-f0-9]{64}" "SHARED_SECRET.*=.*[a-f0-9]{32}" "sk-[a-zA-Z0-9]{20,}"; do
+            MATCHES=$(grep -rn --include="*.ts" --include="*.json" -E "$pattern" . \
+              --exclude-dir=node_modules --exclude-dir=.wrangler --exclude=".dev.vars" \
+              --exclude="*.example" --exclude="CLAUDE.md" 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              echo "::error::Possible secret found matching pattern '$pattern':"
+              echo "$MATCHES"
+              FOUND=1
+            fi
+          done
+          if [ "$FOUND" -eq 1 ]; then exit 1; fi
+          echo "No secrets found."
+
+      - name: No .mcp.json committed
+        run: |
+          if git ls-files --error-unmatch .mcp.json 2>/dev/null; then
+            echo "::error::.mcp.json is tracked by git. Add to .gitignore."
+            exit 1
+          fi
+
+      - name: Tool descriptions must include boundaries
+        run: |
+          echo "Checking MCP tool descriptions for boundary clauses..."
+          TARGET=workers/vault-mcp/src/index.ts
+          FAIL=0
+          DESCS=$(grep -n 'description:' "$TARGET" | grep -v "//")
+          while IFS= read -r line; do
+            LINENUM=$(echo "$line" | cut -d: -f1)
+            BLOCK=$(sed -n "${LINENUM},$((LINENUM+5))p" "$TARGET")
+            if echo "$BLOCK" | grep -qi "registerTool\|description:"; then
+              if ! echo "$BLOCK" | grep -qiE "does not|do not|destructive|read-only|side effect"; then
+                echo "::warning file=$TARGET,line=$LINENUM::Tool description may be missing boundary clause (Does NOT / READ-ONLY / DESTRUCTIVE)"
+                FAIL=1
+              fi
+            fi
+          done <<< "$DESCS"
+          if [ "$FAIL" -eq 1 ]; then
+            echo "::warning::Some tool descriptions may lack boundary clauses."
+          fi
+          echo "Tool description check complete."
+
+      - name: workers_dev must be false
+        run: |
+          FAIL=0
+          for wrangler_toml in workers/vault-mcp/wrangler.toml; do
+            if grep -q "workers_dev.*=.*true" "$wrangler_toml" 2>/dev/null; then
+              echo "::error::$wrangler_toml has workers_dev = true. Must be false."
+              FAIL=1
+            fi
+          done
+          if [ "$FAIL" -eq 1 ]; then exit 1; fi
+          echo "workers_dev check passed."
+
+      - name: No literal underscore wildcards in SQLite LIKE clauses
+        run: |
+          # SQLite LIKE treats `_` as a single-character wildcard. A pattern
+          # like `LIKE '__%'` matches every string ≥2 chars, NOT strings
+          # starting with two underscores. The intent of `LIKE '__...` is
+          # almost always to filter sentinel rows and the correct form is
+          # `GLOB '__*'` (GLOB uses literal `_`) or `LIKE '\_\_...' ESCAPE '\'`.
+          # See feedback_sqlite_like_underscore.md for the full lesson.
+          # Allowlist via `-- LIKE-OK: <reason>` marker on the same line.
+          echo "Checking for LIKE '__... patterns without escape..."
+          MATCHES=$(grep -rn --include="*.ts" -E "LIKE '__" workers/ 2>/dev/null \
+            | grep -v "LIKE-OK:" \
+            | grep -v "ESCAPE" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Found LIKE '__... pattern with unescaped underscores. SQLite treats _ as single-char wildcard. Use GLOB '__*' or LIKE '\\_\\_...' ESCAPE '\\'."
+            echo "$MATCHES"
+            echo "If this is intentional (truly want '<any 2 chars>...'), append a '-- LIKE-OK: <reason>' comment."
+            exit 1
+          fi
+          echo "No unescaped underscore wildcards found."

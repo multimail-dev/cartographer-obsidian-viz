@@ -1,0 +1,8 @@
+SHARED_SECRET=change-me-generate-a-64-char-hex-string
+COOKIE_ENCRYPTION_KEY=change-me-generate-a-32-char-hex-string
+# Optional: CF Access for headless-host MCP path
+# ACCESS_CLIENT_ID=your-cf-access-client-id
+# ACCESS_CLIENT_SECRET=your-cf-access-client-secret
+# ACCESS_TOKEN_URL=https://your-team.cloudflareaccess.com/cdn-cgi/access/token
+# ACCESS_AUTHORIZATION_URL=https://your-team.cloudflareaccess.com/cdn-cgi/access/authorize
+# ACCESS_JWKS_URL=https://your-team.cloudflareaccess.com/cdn-cgi/access/certs

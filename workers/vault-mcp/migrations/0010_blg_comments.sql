@@ -1,0 +1,1 @@
+-- Removed: blog subsystem. No-op to preserve migration sequence.

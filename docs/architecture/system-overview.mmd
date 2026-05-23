@@ -1,0 +1,88 @@
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        browser["Browser<br/>(your-atlas-domain.com)"]
+        claude["Claude Desktop / Agents<br/>(your-vault-domain.com/mcp)"]
+        pipelines["Pipeline / Crons<br/>(your-vault-domain.com/api/*)"]
+    end
+
+    subgraph cf["Cloudflare Infrastructure"]
+        subgraph worker["vault-mcp Worker (unified)"]
+            oauth["OAuth Provider<br/>(@cloudflare/workers-oauth-provider)"]
+            hono["Hono Router<br/>(route dispatch)"]
+            bearer["Bearer Auth<br/>(timingSafeEqual)"]
+            cfaccess["CF Access JWT<br/>(JWKS validation)"]
+
+            subgraph surfaces["Three API Surfaces"]
+                uiapi["UI API<br/>/api/meta, /api/graph/*<br/>/api/search, /api/note<br/>/api/enrichments, /api/views"]
+                mcpserver["MCP Server<br/>VaultMcpDO (Durable Object)<br/>12 registered tools"]
+                bearerapi["Bearer HTTP API<br/>/api/build-graph, /api/sync-graph<br/>/api/fast-score, /api/digest<br/>/api/ingest-triples, /api/sync-ops"]
+            end
+
+            subgraph engine["Graph Engine"]
+                extract["extractEdgesFromNote()"]
+                buildgraph["buildGraph()<br/>(extract + finalize phases)"]
+                syncgraph["syncGraph()<br/>(incremental, SYNC_LIMIT=20)"]
+                applyops["applyOps()<br/>(vault_ops audit log)"]
+                drain["drainDegrees()<br/>(watermark-based)"]
+                fastscore["runFastScore()<br/>(4 detectors)"]
+                findrelated["toolFindRelated()<br/>(BFS + hub dampening)"]
+                centrality["computeCentrality()<br/>(10-iter PageRank)"]
+            end
+
+            subgraph crons["Scheduled Jobs"]
+                hourly["Hourly<br/>orphan cleanup"]
+                daily["Daily 05:00 UTC<br/>fast-score"]
+                weekly1["Weekly 06:00 UTC<br/>writeVaultSnapshot"]
+                weekly2["Weekly 07:00 UTC<br/>runAlgorithmEnrichment"]
+            end
+        end
+
+        subgraph storage["Cloudflare Storage"]
+            d1[("D1: vault-graph<br/>vault_nodes, vault_edges<br/>vault_ops, vault_fts<br/>vault_enrichment<br/>ingest_runs, note_access<br/>meta, enrich_cursor")]
+            r2[("R2: obsidian-vault<br/>Markdown notes<br/>Snapshots<br/>__structural_neighbors__.json")]
+            kv[("KV: OAuth tokens")]
+        end
+
+        sqp["vault-mcp-power Worker<br/>(UNROUTED — rollback lever)"]
+    end
+
+    subgraph local["Local Machine"]
+        localdb[("~/.cartographer/<br/>local-graph.sqlite")]
+        vault["~/vault/<br/>(local vault copy)"]
+        logs["~/Library/Logs/<br/>cartographer/"]
+    end
+
+    subgraph packages["Shared Packages"]
+        contract["vault-graph-contract<br/>(edge types, API DTOs)"]
+        synceng["sync-engine<br/>(R2 ↔ vault sync, ETag)"]
+        atlasui["atlas-ui<br/>(Sigma.js + FA3 source)"]
+    end
+
+    browser -->|"CF Access JWT"| cfaccess
+    cfaccess --> uiapi
+    claude -->|"OAuth"| oauth
+    oauth --> mcpserver
+    pipelines -->|"Bearer token"| bearer
+    bearer --> bearerapi
+
+    mcpserver --> engine
+    bearerapi --> engine
+    uiapi --> engine
+
+    engine --> d1
+    engine --> r2
+    crons --> engine
+
+    atlasui -.->|"build output"| worker
+    contract -.->|"edge types import"| worker
+    synceng -.->|"used by obsidian plugin"| r2
+
+    sqp -.->|"same D1/R2 bindings<br/>(inactive)"| storage
+
+    style cf fill:#f5f5ff,stroke:#4a6cf7
+    style worker fill:#e8f0fe,stroke:#4a6cf7
+    style storage fill:#fff3e0,stroke:#ff9800
+    style local fill:#e8f5e9,stroke:#4caf50
+    style packages fill:#fce4ec,stroke:#e91e63
+```

@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartographer — Architecture</title>
+<style>
+  :root {
+    --bg: #0c0e14;
+    --surface: #14161e;
+    --surface-2: #1a1d28;
+    --surface-3: #21242f;
+    --border: #2a2d3a;
+    --border-light: #353849;
+    --text: #e8eaf0;
+    --text-dim: #9498a8;
+    --text-faint: #5d6175;
+    --blue: #5b8def;
+    --blue-dim: rgba(91, 141, 239, 0.12);
+    --blue-glow: rgba(91, 141, 239, 0.06);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167, 139, 250, 0.12);
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.10);
+    --rose: #f472b6;
+    --rose-dim: rgba(244, 114, 182, 0.10);
+    --cyan: #22d3ee;
+    --cyan-dim: rgba(34, 211, 238, 0.10);
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* NAV */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(12, 14, 20, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 48px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    gap: 32px;
+  }
+
+  .logo {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+  }
+
+  .logo .dot {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--green);
+  }
+
+  nav {
+    display: flex;
+    gap: 2px;
+    height: 100%;
+  }
+
+  nav button {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.15s;
+    font-family: inherit;
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  nav button:hover { color: var(--text); }
+
+  nav button.active {
+    color: var(--text);
+  }
+
+  nav button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 16px;
+    right: 16px;
+    height: 2px;
+    background: var(--blue);
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* PAGES */
+  .page { display: none; padding: 40px 48px 80px; }
+  .page.active { display: block; }
+
+  .page-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+  }
+
+  .page-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 36px;
+  }
+
+  /* OVERVIEW GRID */
+  .overview {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 20px;
+    max-width: 1400px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+  }
+
+  .card-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-label .icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+  }
+
+  /* color themes */
+  .theme-blue .card-label { color: var(--blue); }
+  .theme-blue::before { background: linear-gradient(90deg, var(--blue), transparent); }
+  .theme-blue .icon { background: var(--blue-dim); color: var(--blue); }
+
+  .theme-purple .card-label { color: var(--purple); }
+  .theme-purple::before { background: linear-gradient(90deg, var(--purple), transparent); }
+  .theme-purple .icon { background: var(--purple-dim); color: var(--purple); }
+
+  .theme-green .card-label { color: var(--green); }
+  .theme-green::before { background: linear-gradient(90deg, var(--green), transparent); }
+  .theme-green .icon { background: var(--green-dim); color: var(--green); }
+
+  .theme-amber .card-label { color: var(--amber); }
+  .theme-amber::before { background: linear-gradient(90deg, var(--amber), transparent); }
+  .theme-amber .icon { background: var(--amber-dim); color: var(--amber); }
+
+  .theme-rose .card-label { color: var(--rose); }
+  .theme-rose::before { background: linear-gradient(90deg, var(--rose), transparent); }
+  .theme-rose .icon { background: var(--rose-dim); color: var(--rose); }
+
+  .theme-cyan .card-label { color: var(--cyan); }
+  .theme-cyan::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+  .theme-cyan .icon { background: var(--cyan-dim); color: var(--cyan); }
+
+  /* Items inside cards */
+  .item {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    transition: border-color 0.15s;
+  }
+
+  .item:last-child { margin-bottom: 0; }
+  .item:hover { border-color: var(--border-light); }
+
+  .item .name {
+    font-weight: 500;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .item .desc {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  .item .mono {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* data pills */
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    font-family: 'SF Mono', monospace;
+  }
+
+  .pill-blue { background: var(--blue-dim); color: var(--blue); }
+  .pill-purple { background: var(--purple-dim); color: var(--purple); }
+  .pill-green { background: var(--green-dim); color: var(--green); }
+  .pill-amber { background: var(--amber-dim); color: var(--amber); }
+  .pill-rose { background: var(--rose-dim); color: var(--rose); }
+
+  /* flow arrows */
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .flow-arrow {
+    color: var(--text-faint);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* grid placement for overview */
+  .clients-card { grid-column: 1 / -1; }
+  .cf-card { grid-column: 1 / 3; grid-row: 2 / 4; }
+  .local-card { grid-column: 3; grid-row: 2; }
+  .packages-card { grid-column: 3; grid-row: 3; }
+
+  /* inner grids */
+  .inner-grid {
+    display: grid;
+    gap: 6px;
+  }
+
+  .inner-grid-2 { grid-template-columns: 1fr 1fr; }
+  .inner-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .inner-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .section-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 14px 0;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+  }
+
+  /* connectors */
+  .connector-label {
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: center;
+    padding: 4px 0;
+    letter-spacing: 0.3px;
+  }
+
+  .connector-line {
+    height: 20px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .connector-line::after {
+    content: '';
+    width: 1px;
+    height: 100%;
+    background: var(--border-light);
+  }
+
+  /* DATA FLOW page */
+  .flow-timeline {
+    max-width: 900px;
+    position: relative;
+  }
+
+  .flow-timeline::before {
+    content: '';
+    position: absolute;
+    left: 23px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .flow-step {
+    position: relative;
+    padding-left: 56px;
+    padding-bottom: 28px;
+  }
+
+  .flow-step:last-child { padding-bottom: 0; }
+
+  .flow-dot {
+    position: absolute;
+    left: 16px;
+    top: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid;
+    background: var(--bg);
+  }
+
+  .flow-step-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    letter-spacing: -0.2px;
+  }
+
+  .flow-step-body {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .flow-step-body code {
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--text);
+  }
+
+  .flow-step-detail {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+
+  .flow-step-detail strong { color: var(--text); font-weight: 500; }
+
+  /* TOOLS page */
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    max-width: 1400px;
+  }
+
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+
+  .tool-name {
+    font-family: 'SF Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .tool-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+
+  .tool-stores {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .group-header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0 4px;
+  }
+
+  .group-header .group-name {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .group-header .group-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .group-header .group-count {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  /* DATA FLOW interactive */
+  .df-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 2px;
+    border: 1px solid transparent;
+  }
+
+  .df-selector:hover { background: var(--surface-2); }
+
+  .df-selector.active {
+    background: var(--surface);
+    border-color: var(--border);
+  }
+
+  .df-sel-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .df-sel-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .df-sel-desc {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  .df-path {
+    opacity: 0.2;
+    transition: opacity 0.25s;
+  }
+
+  .df-path.active {
+    opacity: 1;
+  }
+
+  .df-detail-panel {
+    display: none;
+  }
+
+  .df-detail-panel.active {
+    display: block;
+  }
+
+  /* responsive */
+  @media (max-width: 1000px) {
+    header { padding: 0 24px; }
+    .page { padding: 28px 24px 60px; }
+    .overview {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+    .clients-card, .cf-card, .local-card, .packages-card {
+      grid-column: auto;
+      grid-row: auto;
+    }
+    .inner-grid-4 { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="dot"></span>
+    Cartographer
+  </div>
+  <nav>
+    <button class="active" onclick="show('overview', this)">Overview</button>
+    <button onclick="show('info', this)">Information</button>
+    <button onclick="show('dataflow', this)">Data Flow</button>
+    <button onclick="show('tools', this)">MCP Tools</button>
+  </nav>
+</header>
+
+<!-- ============ OVERVIEW ============ -->
+<div id="overview" class="page active">
+  <h2 class="page-title">System Overview</h2>
+  <p class="page-sub">Components, infrastructure boundaries, auth surfaces, and storage topology</p>
+
+  <div class="overview">
+
+    <!-- CLIENTS -->
+    <div class="card theme-amber clients-card">
+      <div class="card-label"><span class="icon">↗</span> Clients</div>
+      <div class="inner-grid inner-grid-4">
+        <div class="item">
+          <div class="name">Browser</div>
+          <div class="desc">your-atlas-domain.com<br/><span class="pill pill-purple">CF Access JWT</span></div>
+        </div>
+        <div class="item">
+          <div class="name">Claude / Agents</div>
+          <div class="desc">your-vault-domain.com/mcp<br/><span class="pill pill-purple">OAuth</span></div>
+        </div>
+        <div class="item">
+          <div class="name">Pipeline / Crons</div>
+          <div class="desc">your-vault-domain.com/api/*<br/><span class="pill pill-rose">Bearer</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLOUDFLARE -->
+    <div class="card theme-blue cf-card">
+      <div class="card-label"><span class="icon">☁</span> Cloudflare Infrastructure</div>
+
+      <div class="section-label">Auth Layer</div>
+      <div class="inner-grid inner-grid-3" style="margin-bottom: 14px;">
+        <div class="item">
+          <div class="name">CF Access JWT</div>
+          <div class="mono">JWKS validation</div>
+        </div>
+        <div class="item">
+          <div class="name">OAuth Provider</div>
+          <div class="mono">@cloudflare/workers-oauth-provider</div>
+        </div>
+        <div class="item">
+          <div class="name">Bearer Auth</div>
+          <div class="mono">timingSafeEqual</div>
+        </div>
+      </div>
+
+      <div class="section-label">vault-mcp Worker — Three API Surfaces</div>
+      <div class="inner-grid inner-grid-3" style="margin-bottom: 14px;">
+        <div class="item">
+          <div class="name">UI API</div>
+          <div class="mono">/api/meta, /api/graph/*<br/>/api/search, /api/note<br/>/api/enrichments, /api/views</div>
+        </div>
+        <div class="item">
+          <div class="name" style="color: var(--blue);">MCP Server</div>
+          <div class="mono">VaultMcpDO (Durable Object)<br/>18 registered tools</div>
+        </div>
+        <div class="item">
+          <div class="name">Bearer HTTP API</div>
+          <div class="mono">/api/build-graph, /api/sync-graph<br/>/api/fast-score, /api/digest<br/>/api/ingest-triples, /api/sync-ops</div>
+        </div>
+      </div>
+
+      <div class="section-label">Graph Engine</div>
+      <div class="inner-grid inner-grid-4" style="margin-bottom: 14px;">
+        <div class="item">
+          <div class="mono">extractEdgesFromNote()</div>
+        </div>
+        <div class="item">
+          <div class="mono">buildGraph()</div>
+          <div class="desc">extract + finalize</div>
+        </div>
+        <div class="item">
+          <div class="mono">syncGraph()</div>
+          <div class="desc">incremental, SYNC_LIMIT=20</div>
+        </div>
+        <div class="item">
+          <div class="mono">applyOps()</div>
+          <div class="desc">vault_ops audit log</div>
+        </div>
+        <div class="item">
+          <div class="mono">drainDegrees()</div>
+          <div class="desc">watermark-based</div>
+        </div>
+        <div class="item">
+          <div class="mono">runFastScore()</div>
+          <div class="desc">4 detectors</div>
+        </div>
+        <div class="item">
+          <div class="mono">toolFindRelated()</div>
+          <div class="desc">BFS + hub dampening</div>
+        </div>
+        <div class="item">
+          <div class="mono">computeCentrality()</div>
+          <div class="desc">10-iter PageRank</div>
+        </div>
+      </div>
+
+      <div class="inner-grid inner-grid-2">
+        <div>
+          <div class="section-label">Scheduled Jobs</div>
+          <div class="item"><div class="mono">Hourly</div><div class="desc">orphan cleanup</div></div>
+          <div class="item" style="margin-top: 6px;"><div class="mono">Daily 05:00 UTC</div><div class="desc">fast-score</div></div>
+          <div class="item" style="margin-top: 6px;"><div class="mono">Weekly 06:00 UTC</div><div class="desc">writeVaultSnapshot</div></div>
+          <div class="item" style="margin-top: 6px;"><div class="mono">Weekly 07:00 UTC</div><div class="desc">runAlgorithmEnrichment</div></div>
+        </div>
+        <div>
+          <div class="section-label">Storage</div>
+          <div class="item" style="border-color: var(--amber); border-color: rgba(251,191,36,0.3);">
+            <div class="name" style="color: var(--amber);">D1: vault-graph</div>
+            <div class="mono">vault_nodes · vault_edges · vault_ops<br/>vault_fts · vault_enrichment<br/>ingest_runs · note_access · meta</div>
+          </div>
+          <div class="item" style="margin-top: 6px; border-color: rgba(52,211,153,0.3);">
+            <div class="name" style="color: var(--green);">R2: obsidian-vault</div>
+            <div class="mono">Markdown notes · Snapshots</div>
+          </div>
+          <div class="item" style="margin-top: 6px; border-color: rgba(244,114,182,0.3);">
+            <div class="name" style="color: var(--rose);">KV</div>
+            <div class="mono">OAuth tokens</div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+      <div class="item" style="opacity: 0.5;">
+        <div class="mono">vault-mcp-power Worker</div>
+        <div class="desc">UNROUTED — rollback lever, same D1/R2 bindings</div>
+      </div>
+    </div>
+
+    <!-- LOCAL -->
+    <div class="card theme-green local-card">
+      <div class="card-label"><span class="icon">⌂</span> Local Machine</div>
+      <div class="item">
+        <div class="name">Local Graph DB</div>
+        <div class="mono">~/.cartographer/local-graph.sqlite</div>
+        <div class="desc">Mirror of D1 for offline analysis</div>
+      </div>
+      <div class="item" style="margin-top: 6px;">
+        <div class="name">Vault Copy</div>
+        <div class="mono">~/vault/</div>
+        <div class="desc">Local Obsidian vault, synced via sync-engine</div>
+      </div>
+      <div class="item" style="margin-top: 6px;">
+        <div class="name">Logs</div>
+        <div class="mono">~/Library/Logs/cartographer/</div>
+      </div>
+    </div>
+
+    <!-- PACKAGES -->
+    <div class="card theme-rose packages-card">
+      <div class="card-label"><span class="icon">◇</span> Shared Packages</div>
+      <div class="item">
+        <div class="name">vault-graph-contract</div>
+        <div class="desc">Edge type definitions, API DTOs</div>
+      </div>
+      <div class="item" style="margin-top: 6px;">
+        <div class="name">sync-engine</div>
+        <div class="desc">R2 ↔ vault sync, ETag-based</div>
+      </div>
+      <div class="item" style="margin-top: 6px;">
+        <div class="name">atlas-ui</div>
+        <div class="desc">Sigma.js + ForceAtlas3 visualization</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ INFORMATION ============ -->
+<div id="info" class="page">
+  <h2 class="page-title">Information Model</h2>
+  <p class="page-sub">What the system knows, how knowledge transforms, and how it feeds back into itself</p>
+
+  <!-- Knowledge Lifecycle -->
+  <div style="margin-bottom: 48px;">
+    <div class="section-label" style="font-size: 13px; margin-bottom: 16px; color: var(--text);">Knowledge Lifecycle</div>
+    <p style="font-size: 13px; color: var(--text-dim); margin-bottom: 20px; max-width: 800px; line-height: 1.7;">
+      Every piece of knowledge enters as a raw Obsidian note and is progressively transformed through five stages. Each stage feeds the next — and the later stages feed back into note creation, closing the loop.
+    </p>
+
+    <div style="display: flex; gap: 0; max-width: 1200px; position: relative;">
+
+      <div style="flex: 1; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius) 0 0 var(--radius); position: relative;">
+        <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--green); margin-bottom: 10px;">1. Raw Note</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          Markdown file in R2 with YAML frontmatter.<br/>
+          <span style="color: var(--text-faint);">Required:</span> <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">type</code> <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">tags[]</code> <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">created</code><br/>
+          <span style="color: var(--text-faint);">Optional:</span> speakers, concepts, aliases
+        </div>
+        <div style="position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 16px; z-index: 1;">→</div>
+      </div>
+
+      <div style="flex: 1; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-left: none; position: relative;">
+        <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--blue); margin-bottom: 10px;">2. Extraction</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">extractEdgesFromNote()</code> parses:<br/>
+          • <span class="pill pill-green" style="font-size: 9px;">wikilinks</span> from body text<br/>
+          • <span class="pill pill-amber" style="font-size: 9px;">tags</span> from frontmatter<br/>
+          • <span class="pill pill-purple" style="font-size: 9px;">speakers</span> <span class="pill pill-purple" style="font-size: 9px;">concepts</span> from frontmatter<br/>
+          • <span class="pill pill-rose" style="font-size: 9px;">section context</span> (## Related, ## Speakers, ## Key Claims → typed edges)
+        </div>
+        <div style="position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 16px; z-index: 1;">→</div>
+      </div>
+
+      <div style="flex: 1; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-left: none; position: relative;">
+        <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--amber); margin-bottom: 10px;">3. Graph</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          Nodes (vault_nodes) + Edges (vault_edges).<br/>
+          Degree computation (in/out).<br/>
+          FTS5 full-text index (vault_fts).<br/>
+          Audit log of every mutation (vault_ops).<br/>
+          <span style="color: var(--text-faint);">+ synthetic edges:</span> folder, temporal (±7d), tag_cooccurrence
+        </div>
+        <div style="position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 16px; z-index: 1;">→</div>
+      </div>
+
+      <div style="flex: 1; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-left: none; position: relative;">
+        <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--purple); margin-bottom: 10px;">4. Enrichment</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          Weekly algorithmic pass:<br/>
+          • <strong style="color: var(--text);">PageRank</strong> (10 iterations)<br/>
+          • <strong style="color: var(--text);">Louvain clustering</strong> → cluster_id<br/>
+          • <strong style="color: var(--text);">Bridge detection</strong><br/>
+          Daily fast-score: centrality shifts, access divergence, tag anomalies
+        </div>
+        <div style="position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--text-faint); font-size: 16px; z-index: 1;">→</div>
+      </div>
+
+      <div style="flex: 1; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-left: none; border-radius: 0 var(--radius) var(--radius) 0;">
+        <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--rose); margin-bottom: 10px;">5. Synthesis</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          High-signal staging: fast-score surfaces candidates for attention.<br/>
+          Enrichment outputs become nodes in the graph, creating new edges and further enrichment.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Feedback arrow -->
+    <div style="max-width: 1200px; position: relative; height: 32px;">
+      <div style="position: absolute; left: 85%; right: 5%; top: 8px; border-bottom: 1px dashed var(--rose); border-right: 1px dashed var(--rose); border-bottom-right-radius: 12px; height: 16px;"></div>
+      <div style="position: absolute; left: 5%; right: 85%; top: 24px; border-top: 1px dashed var(--rose); border-left: 1px dashed var(--rose); border-top-left-radius: 12px; height: 16px;"></div>
+      <div style="position: absolute; left: 5%; top: 14px; font-size: 10px; color: var(--rose); letter-spacing: 0.5px;">↑ enrichment outputs re-enter as notes → new graph edges</div>
+    </div>
+  </div>
+
+  <!-- Edge Types -->
+  <div style="margin-bottom: 48px;">
+    <div class="section-label" style="font-size: 13px; margin-bottom: 16px; color: var(--text);">Edge Types <span style="color: var(--text-faint); font-weight: 400;">(31 types across 6 categories)</span></div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1200px;">
+
+      <!-- Extracted edges -->
+      <div class="card theme-green" style="padding: 16px;">
+        <div class="card-label" style="margin-bottom: 10px;"><span class="icon">◉</span> Extracted from Notes</div>
+        <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Parsed by <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">extractEdgesFromNote()</code> on every write/sync
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">wikilink</span>
+            <span style="font-size: 11px; color: var(--text-dim);">[[Target]] in body text · weight 1.0</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">related</span>
+            <span style="font-size: 11px; color: var(--text-dim);">[[Target]] in ## Related section · weight 1.5</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">tag</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Frontmatter tags (excluded: format, source, agent)</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">spoke_in</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Frontmatter speakers[] OR ## Speakers section · 1.5</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">discusses</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Frontmatter concepts[] OR ## Podcast section · 1.5</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">claims</span>
+            <span style="font-size: 11px; color: var(--text-dim);">## Key Claims section links · 1.5</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-green" style="min-width: 70px; text-align: center;">predicts</span>
+            <span style="font-size: 11px; color: var(--text-dim);">## Predictions section links · 1.5</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Synthetic edges -->
+      <div class="card theme-blue" style="padding: 16px;">
+        <div class="card-label" style="margin-bottom: 10px;"><span class="icon">⚡</span> Computed (Synthetic)</div>
+        <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Generated during buildGraph finalize phase
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-blue" style="min-width: 100px; text-align: center;">folder</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Same-folder note pairs</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-blue" style="min-width: 100px; text-align: center;">temporal</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Notes within ±7 days of each other</span>
+          </div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="flow-row" style="margin: 0; gap: 8px;">
+            <span class="pill pill-blue" style="min-width: 100px; text-align: center;">tag_cooccurrence</span>
+            <span style="font-size: 11px; color: var(--text-dim);">Notes sharing 2+ tags</span>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+        <div class="card-label" style="margin-bottom: 10px;"><span class="icon">⬡</span> Ingested (External)</div>
+        <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Via <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">ingest_triples</code> — automation pipeline, agents
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+          <span class="pill pill-purple">part_of</span>
+          <span class="pill pill-purple">has_part</span>
+          <span class="pill pill-purple">references</span>
+          <span class="pill pill-purple">derived_from</span>
+          <span class="pill pill-purple">version_of</span>
+          <span class="pill pill-purple">replaces</span>
+          <span class="pill pill-purple">requires</span>
+          <span class="pill pill-purple">instance_of</span>
+          <span class="pill pill-purple">broader</span>
+          <span class="pill pill-purple">narrower</span>
+          <span class="pill pill-purple">supports</span>
+          <span class="pill pill-purple">contradicts</span>
+          <span class="pill pill-purple">evolved_into</span>
+          <span class="pill pill-purple">inspired_by</span>
+          <span class="pill pill-purple">depends_on</span>
+          <span class="pill pill-purple">overrides</span>
+          <span class="pill pill-purple">learned_from</span>
+          <span class="pill pill-purple">scoped_by</span>
+          <span class="pill pill-purple">rejected</span>
+          <span class="pill pill-purple">belongs_to</span>
+        </div>
+      </div>
+
+      <!-- Data model -->
+      <div class="card theme-amber" style="padding: 16px;">
+        <div class="card-label" style="margin-bottom: 10px;"><span class="icon">⊞</span> Data Model (D1)</div>
+        <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 10px;">
+          Tables in D1: vault-graph
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--amber); font-size: 12px;">vault_nodes</div>
+          <div style="font-size: 11px; color: var(--text-dim);">path · title · note_type · folder · tags · aliases · size · modified_at · in_degree · out_degree</div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--amber); font-size: 12px;">vault_edges</div>
+          <div style="font-size: 11px; color: var(--text-dim);">source · target · edge_type · weight · origin · ingest_run_id</div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--amber); font-size: 12px;">vault_ops</div>
+          <div style="font-size: 11px; color: var(--text-dim);">ulid · op_type (add_edge, upsert_node) · payload · origin · created_at — CRDT sync unit</div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--amber); font-size: 12px;">vault_enrichment</div>
+          <div style="font-size: 11px; color: var(--text-dim);">path · pagerank · prev_pagerank · cluster_id — weekly algo output</div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--amber); font-size: 12px;">vault_fts</div>
+          <div style="font-size: 11px; color: var(--text-dim);">FTS5 virtual table · BM25 ranking · search_notes</div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--amber); font-size: 12px;">note_access</div>
+          <div style="font-size: 11px; color: var(--text-dim);">path · accessed_at — feeds detectAccessDivergence()</div>
+        </div>
+        <div class="item" style="padding: 8px 10px;">
+          <div class="name" style="color: var(--text-faint); font-size: 12px;">meta · ingest_runs</div>
+          <div style="font-size: 11px; color: var(--text-faint);">Operational: sync watermarks, run tracking</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Query scoring -->
+  <div style="margin-bottom: 48px;">
+    <div class="section-label" style="font-size: 13px; margin-bottom: 16px; color: var(--text);">How Queries Use the Graph <span style="color: var(--text-faint); font-weight: 400;">(findRelated scoring model)</span></div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 1200px;">
+      <div class="card" style="padding: 16px; border-color: rgba(251,191,36,0.2);">
+        <div style="font-size: 28px; font-weight: 700; color: var(--amber); margin-bottom: 4px;">BFS</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          Breadth-first traversal from seed node, depth 1–2. Raw score = edge weight (1.0 or 1.5 depending on edge type). Edges traversed in both directions.
+        </div>
+      </div>
+      <div class="card" style="padding: 16px; border-color: rgba(251,191,36,0.2);">
+        <div style="font-size: 28px; font-weight: 700; color: var(--amber); margin-bottom: 4px;">÷ Hub</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          <strong>Hub dampening.</strong> If node degree &gt; 50, multiply score by <code style="font-size: 11px;">50 / degree</code>. Prevents hyper-connected nodes from dominating results. A node with 200 connections gets 0.25× weight.
+        </div>
+      </div>
+      <div class="card" style="padding: 16px; border-color: rgba(251,191,36,0.2);">
+        <div style="font-size: 28px; font-weight: 700; color: var(--amber); margin-bottom: 4px;">⊕ Cluster</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          <strong>Cluster diversity.</strong> Uses Louvain <code style="font-size: 11px;">cluster_id</code> from vault_enrichment. Results spread across clusters so you don't get 25 notes from the same topic neighborhood.
+        </div>
+      </div>
+      <div class="card" style="padding: 16px; border-color: rgba(251,191,36,0.2);">
+        <div style="font-size: 28px; font-weight: 700; color: var(--amber); margin-bottom: 4px;">× 0.1</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          <strong>Dormant dampening.</strong> Notes in DAMPENED_FOLDERS get 0.1× weight. Phantoms (referenced but never written) and transcripts excluded entirely. Top 25 returned.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- What feeds what -->
+  <div>
+    <div class="section-label" style="font-size: 13px; margin-bottom: 16px; color: var(--text);">Feedback Loops</div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1200px;">
+      <div class="card theme-green" style="padding: 16px;">
+        <div class="card-label" style="margin-bottom: 8px;"><span class="icon">↻</span> Write → Query</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          Every <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">write_note</code> immediately extracts edges and returns <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">findRelated</code> results. The author sees their note's neighborhood the moment they save. New edges are queryable within milliseconds.
+        </div>
+      </div>
+      <div class="card theme-purple" style="padding: 16px;">
+        <div class="card-label" style="margin-bottom: 8px;"><span class="icon">↻</span> Enrichment → Query</div>
+        <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+          Weekly PageRank + Louvain writes to <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">vault_enrichment</code>. Next <code style="font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; color: var(--text);">findRelated</code> call uses updated cluster_ids for diversity scoring. Queries get smarter every week without any code change.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ DATA FLOW ============ -->
+<div id="dataflow" class="page">
+  <h2 class="page-title">Data Flow</h2>
+  <p class="page-sub">Click a flow to highlight its path through the system. Eight distinct data paths from ingestion through query and enrichment.</p>
+
+  <div style="display: flex; gap: 24px; max-width: 1400px;">
+
+    <!-- Flow selector sidebar -->
+    <div style="width: 240px; flex-shrink: 0;">
+      <div class="df-selector active" data-flow="write" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--green);"></div>
+        <div>
+          <div class="df-sel-name">Note Write</div>
+          <div class="df-sel-desc">Create / update a note</div>
+        </div>
+      </div>
+      <div class="df-selector" data-flow="build" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--blue);"></div>
+        <div>
+          <div class="df-sel-name">Build Graph</div>
+          <div class="df-sel-desc">Full rebuild (extract + finalize)</div>
+        </div>
+      </div>
+      <div class="df-selector" data-flow="sync" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--cyan);"></div>
+        <div>
+          <div class="df-sel-name">Sync Graph</div>
+          <div class="df-sel-desc">Incremental, 20 notes/call</div>
+        </div>
+      </div>
+      <div class="df-selector" data-flow="ingest" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--purple);"></div>
+        <div>
+          <div class="df-sel-name">Triple Ingestion</div>
+          <div class="df-sel-desc">automation pipeline (s,r,o) edges</div>
+        </div>
+      </div>
+      <div class="df-selector" data-flow="query" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--amber);"></div>
+        <div>
+          <div class="df-sel-name">findRelated</div>
+          <div class="df-sel-desc">BFS query with dampening</div>
+        </div>
+      </div>
+      <div class="df-selector" data-flow="score" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--rose);"></div>
+        <div>
+          <div class="df-sel-name">Fast Score</div>
+          <div class="df-sel-desc">4 daily detectors</div>
+        </div>
+      </div>
+      <div class="df-selector" data-flow="crdt" onclick="selectFlow(this)">
+        <div class="df-sel-dot" style="background: var(--purple);"></div>
+        <div>
+          <div class="df-sel-name">CRDT + Enrichment</div>
+          <div class="df-sel-desc">Sync ops + weekly algo</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main diagram area -->
+    <div style="flex: 1; min-width: 0;">
+      <svg id="df-svg" viewBox="0 0 1100 720" style="width: 100%; height: auto; border-radius: var(--radius); background: var(--surface);">
+        <defs>
+          <marker id="ah-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#34d399"/></marker>
+          <marker id="ah-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#5b8def"/></marker>
+          <marker id="ah-cyan" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#22d3ee"/></marker>
+          <marker id="ah-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#a78bfa"/></marker>
+          <marker id="ah-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#fbbf24"/></marker>
+          <marker id="ah-rose" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f472b6"/></marker>
+          <marker id="ah-dim" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#353849"/></marker>
+        </defs>
+
+        <!-- Column headers -->
+        <text x="120" y="35" fill="#9498a8" font-size="11" font-weight="600" text-anchor="middle" letter-spacing="1">USER / AGENT</text>
+        <text x="370" y="35" fill="#9498a8" font-size="11" font-weight="600" text-anchor="middle" letter-spacing="1">WORKER</text>
+        <text x="620" y="35" fill="#9498a8" font-size="11" font-weight="600" text-anchor="middle" letter-spacing="1">ENGINE</text>
+        <text x="830" y="35" fill="#9498a8" font-size="11" font-weight="600" text-anchor="middle" letter-spacing="1">D1</text>
+        <text x="1010" y="35" fill="#9498a8" font-size="11" font-weight="600" text-anchor="middle" letter-spacing="1">R2</text>
+
+        <!-- Column lines -->
+        <line x1="120" y1="48" x2="120" y2="710" stroke="#1e2130" stroke-width="1"/>
+        <line x1="370" y1="48" x2="370" y2="710" stroke="#1e2130" stroke-width="1"/>
+        <line x1="620" y1="48" x2="620" y2="710" stroke="#1e2130" stroke-width="1"/>
+        <line x1="830" y1="48" x2="830" y2="710" stroke="#1e2130" stroke-width="1"/>
+        <line x1="1010" y1="48" x2="1010" y2="710" stroke="#1e2130" stroke-width="1"/>
+
+        <!-- Component boxes (always visible) -->
+        <!-- User -->
+        <rect x="50" y="55" width="140" height="36" rx="6" fill="#1a1d28" stroke="#2a2d3a"/>
+        <text x="120" y="78" fill="#e8eaf0" font-size="12" text-anchor="middle" font-weight="500">User / Agent</text>
+
+        <!-- Worker surfaces -->
+        <rect x="280" y="55" width="180" height="36" rx="6" fill="#1a1d28" stroke="#2a2d3a"/>
+        <text x="370" y="78" fill="#e8eaf0" font-size="12" text-anchor="middle" font-weight="500">vault-mcp Worker</text>
+
+        <!-- Engine functions -->
+        <rect x="530" y="55" width="180" height="36" rx="6" fill="#1a1d28" stroke="#2a2d3a"/>
+        <text x="620" y="78" fill="#e8eaf0" font-size="12" text-anchor="middle" font-weight="500">Graph Engine</text>
+
+        <!-- D1 tables -->
+        <rect x="755" y="55" width="150" height="36" rx="6" fill="#1a1d28" stroke="rgba(251,191,36,0.3)"/>
+        <text x="830" y="78" fill="#fbbf24" font-size="12" text-anchor="middle" font-weight="500">D1: vault-graph</text>
+
+        <!-- R2 -->
+        <rect x="940" y="55" width="140" height="36" rx="6" fill="#1a1d28" stroke="rgba(52,211,153,0.3)"/>
+        <text x="1010" y="78" fill="#34d399" font-size="12" text-anchor="middle" font-weight="500">R2: obsidian-vault</text>
+
+        <!-- ====== FLOW PATHS ====== -->
+
+        <!-- WRITE flow -->
+        <g class="df-path" data-flow="write">
+          <rect x="20" y="105" width="1060" height="78" rx="6" fill="rgba(52,211,153,0.04)" stroke="rgba(52,211,153,0.15)"/>
+          <text x="36" y="122" fill="#34d399" font-size="10" font-weight="600" letter-spacing="0.5">WRITE NOTE</text>
+
+          <line x1="190" y1="135" x2="280" y2="135" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="235" y="130" fill="#34d399" font-size="9" text-anchor="middle">write_note()</text>
+
+          <line x1="460" y1="135" x2="940" y2="135" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="700" y="130" fill="#34d399" font-size="9" text-anchor="middle">PUT markdown</text>
+
+          <line x1="370" y1="145" x2="370" y2="155" stroke="#34d399" stroke-width="1" stroke-dasharray="3"/>
+          <line x1="370" y1="155" x2="530" y2="155" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="450" y="150" fill="#34d399" font-size="9" text-anchor="middle">extractEdges</text>
+
+          <line x1="710" y1="155" x2="755" y2="155" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah-green)"/>
+          <text x="780" y="168" fill="#9498a8" font-size="8" text-anchor="start">applyOps → vault_ops</text>
+          <text x="780" y="178" fill="#9498a8" font-size="8" text-anchor="start">→ vault_edges, vault_nodes</text>
+
+          <line x1="620" y1="163" x2="620" y2="172" stroke="#34d399" stroke-width="1" stroke-dasharray="3"/>
+          <text x="620" y="180" fill="#9498a8" font-size="8" text-anchor="middle">drainDegrees()</text>
+        </g>
+
+        <!-- BUILD flow -->
+        <g class="df-path" data-flow="build">
+          <rect x="20" y="192" width="1060" height="88" rx="6" fill="rgba(91,141,239,0.04)" stroke="rgba(91,141,239,0.15)"/>
+          <text x="36" y="209" fill="#5b8def" font-size="10" font-weight="600" letter-spacing="0.5">BUILD GRAPH</text>
+
+          <line x1="190" y1="225" x2="280" y2="225" stroke="#5b8def" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="235" y="220" fill="#5b8def" font-size="9" text-anchor="middle">build_graph()</text>
+
+          <line x1="460" y1="225" x2="940" y2="225" stroke="#5b8def" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="700" y="220" fill="#5b8def" font-size="9" text-anchor="middle">LIST + GET (200/page, batch 5)</text>
+
+          <line x1="370" y1="235" x2="530" y2="240" stroke="#5b8def" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="440" y="234" fill="#5b8def" font-size="9" text-anchor="middle">extractEdges ×N</text>
+
+          <line x1="710" y1="240" x2="755" y2="240" stroke="#5b8def" stroke-width="1.5" marker-end="url(#ah-blue)"/>
+          <text x="830" y="254" fill="#9498a8" font-size="8" text-anchor="middle">UPSERT vault_nodes</text>
+          <text x="830" y="264" fill="#9498a8" font-size="8" text-anchor="middle">applyOps → vault_edges, vault_fts</text>
+
+          <text x="36" y="268" fill="#5b8def" font-size="9" font-style="italic">Finalize:</text>
+          <text x="100" y="268" fill="#9498a8" font-size="8">folder edges · temporal (±7d) · tag_cooccurrence (2+ shared) · drainDegrees · stale cleanup</text>
+        </g>
+
+        <!-- SYNC flow -->
+        <g class="df-path" data-flow="sync">
+          <rect x="20" y="289" width="1060" height="68" rx="6" fill="rgba(34,211,238,0.04)" stroke="rgba(34,211,238,0.15)"/>
+          <text x="36" y="306" fill="#22d3ee" font-size="10" font-weight="600" letter-spacing="0.5">SYNC GRAPH</text>
+
+          <line x1="190" y1="322" x2="280" y2="322" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
+          <text x="235" y="317" fill="#22d3ee" font-size="9" text-anchor="middle">sync_graph()</text>
+
+          <line x1="460" y1="322" x2="940" y2="316" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
+          <text x="700" y="312" fill="#22d3ee" font-size="9" text-anchor="middle">LIST since __last_sync__</text>
+
+          <line x1="460" y1="332" x2="530" y2="336" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
+          <text x="490" y="346" fill="#22d3ee" font-size="8" text-anchor="middle">×20 max</text>
+
+          <line x1="710" y1="336" x2="755" y2="336" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
+          <text x="830" y="349" fill="#9498a8" font-size="8" text-anchor="middle">reconcileExtract: DEL old + INSERT new</text>
+
+          <text x="620" y="352" fill="#9498a8" font-size="8" text-anchor="middle">drainDegrees() · update watermark</text>
+        </g>
+
+        <!-- INGEST flow -->
+        <g class="df-path" data-flow="ingest">
+          <rect x="20" y="366" width="1060" height="58" rx="6" fill="rgba(167,139,250,0.04)" stroke="rgba(167,139,250,0.15)"/>
+          <text x="36" y="383" fill="#a78bfa" font-size="10" font-weight="600" letter-spacing="0.5">TRIPLE INGESTION</text>
+
+          <line x1="190" y1="400" x2="280" y2="400" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <text x="235" y="395" fill="#a78bfa" font-size="9" text-anchor="middle">POST triples</text>
+
+          <line x1="460" y1="400" x2="530" y2="400" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <text x="495" y="395" fill="#a78bfa" font-size="9" text-anchor="middle">×33 chunks</text>
+
+          <line x1="710" y1="400" x2="755" y2="400" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <text x="830" y="414" fill="#9498a8" font-size="8" text-anchor="middle">applyOps(origin=ingest) → vault_ops, vault_edges</text>
+
+          <text x="620" y="418" fill="#9498a8" font-size="8" text-anchor="middle">drainDegrees()</text>
+        </g>
+
+        <!-- QUERY flow -->
+        <g class="df-path" data-flow="query">
+          <rect x="20" y="433" width="1060" height="78" rx="6" fill="rgba(251,191,36,0.04)" stroke="rgba(251,191,36,0.15)"/>
+          <text x="36" y="450" fill="#fbbf24" font-size="10" font-weight="600" letter-spacing="0.5">FIND RELATED</text>
+
+          <line x1="190" y1="466" x2="280" y2="466" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+          <text x="235" y="461" fill="#fbbf24" font-size="9" text-anchor="middle">find_related()</text>
+
+          <line x1="460" y1="466" x2="530" y2="466" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+          <text x="495" y="461" fill="#fbbf24" font-size="9" text-anchor="middle">BFS</text>
+
+          <line x1="710" y1="460" x2="755" y2="460" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+          <text x="830" y="456" fill="#9498a8" font-size="8" text-anchor="middle">vault_edges (traverse)</text>
+
+          <line x1="710" y1="476" x2="755" y2="476" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+          <text x="830" y="472" fill="#9498a8" font-size="8" text-anchor="middle">vault_enrichment (cluster_id)</text>
+
+          <text x="560" y="498" fill="#9498a8" font-size="8">Hub dampening (>50 → 50/deg)</text>
+          <text x="720" y="498" fill="#9498a8" font-size="8">Cluster diversity</text>
+          <text x="860" y="498" fill="#9498a8" font-size="8">Dormant 0.1× · Top 25</text>
+
+          <line x1="280" y1="480" x2="190" y2="480" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ah-amber)" stroke-dasharray="4"/>
+          <text x="235" y="492" fill="#fbbf24" font-size="8" text-anchor="middle">← results</text>
+        </g>
+
+        <!-- SCORE flow -->
+        <g class="df-path" data-flow="score">
+          <rect x="20" y="520" width="1060" height="68" rx="6" fill="rgba(244,114,182,0.04)" stroke="rgba(244,114,182,0.15)"/>
+          <text x="36" y="537" fill="#f472b6" font-size="10" font-weight="600" letter-spacing="0.5">FAST SCORE (DAILY CRON)</text>
+
+          <line x1="530" y1="552" x2="755" y2="546" stroke="#f472b6" stroke-width="1.5" marker-end="url(#ah-rose)"/>
+
+          <text x="830" y="548" fill="#9498a8" font-size="8" text-anchor="middle">detectBridges (cross-cluster)</text>
+          <text x="830" y="558" fill="#9498a8" font-size="8" text-anchor="middle">detectAccessDivergence (centrality vs access)</text>
+          <text x="830" y="568" fill="#9498a8" font-size="8" text-anchor="middle">detectCentralityShifts (PageRank Δ>10%)</text>
+          <text x="830" y="578" fill="#9498a8" font-size="8" text-anchor="middle">detectTagAnomalies (4+ concepts)</text>
+
+          <line x1="710" y1="570" x2="940" y2="570" stroke="#f472b6" stroke-width="1.5" marker-end="url(#ah-rose)"/>
+          <text x="870" y="584" fill="#f472b6" font-size="8" text-anchor="middle">PUT staging/</text>
+        </g>
+
+        <!-- CRDT flow -->
+        <g class="df-path" data-flow="crdt">
+          <rect x="20" y="664" width="1060" height="48" rx="6" fill="rgba(167,139,250,0.04)" stroke="rgba(167,139,250,0.15)"/>
+          <text x="36" y="681" fill="#a78bfa" font-size="10" font-weight="600" letter-spacing="0.5">CRDT SYNC + WEEKLY ENRICHMENT</text>
+
+          <line x1="190" y1="694" x2="280" y2="694" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <line x1="280" y1="698" x2="190" y2="698" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)" stroke-dasharray="4"/>
+          <text x="235" y="690" fill="#a78bfa" font-size="8" text-anchor="middle">sync-ops (ULID)</text>
+
+          <line x1="460" y1="694" x2="530" y2="694" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <text x="495" y="690" fill="#a78bfa" font-size="8" text-anchor="middle">applyOps</text>
+
+          <line x1="710" y1="694" x2="755" y2="694" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <text x="830" y="690" fill="#9498a8" font-size="8" text-anchor="middle">vault_ops exchange + vault_enrichment</text>
+
+          <line x1="710" y1="702" x2="940" y2="702" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#ah-purple)"/>
+          <text x="830" y="704" fill="#9498a8" font-size="8" text-anchor="middle">Louvain · PageRank · writeVaultSnapshot (JSONL)</text>
+        </g>
+      </svg>
+
+      <!-- Detail panel below diagram -->
+      <div id="df-detail" style="margin-top: 16px;">
+        <div class="df-detail-panel active" data-flow="write">
+          <div class="flow-step-detail">
+            <strong style="color: var(--green);">write_note(path, content)</strong> → PUT markdown to R2 → <code>extractEdgesFromNote()</code> parses wikilinks, tags, frontmatter (speakers, concepts), aliases → <code>applyOps([add_edge, upsert_node])</code> writes to <strong>vault_ops</strong> audit log, materializes <strong>vault_edges</strong>, upserts <strong>vault_nodes</strong> → <code>drainDegrees()</code> recomputes in/out_degree → returns neighborhood suggestions to caller
+          </div>
+        </div>
+        <div class="df-detail-panel" data-flow="build">
+          <div class="flow-step-detail">
+            <strong style="color: var(--blue);">Extract phase:</strong> paginate R2 listing (200 notes/page, batch GET 5 at a time) → <code>extractEdgesFromNote()</code> per note → UPSERT vault_nodes + applyOps(edges) + INSERT/UPDATE vault_fts (FTS5).<br/>
+            <strong style="color: var(--blue);">Finalize phase:</strong> add folder edges (same-folder pairs), temporal edges (±7 day proximity), tag_cooccurrence edges (2+ shared tags) → <code>drainDegrees()</code> final degree computation → stale cleanup (remove old ingest_run_id rows).<br/>
+            <span style="color: var(--text-faint);">24-hour cooldown · force bypasses · returns cursor for resumable pagination</span>
+          </div>
+        </div>
+        <div class="df-detail-panel" data-flow="sync">
+          <div class="flow-step-detail">
+            <strong style="color: var(--cyan);">syncGraph()</strong> → drain prior writers' degrees first → LIST R2 since <code>__last_sync__</code> watermark → process up to <strong>SYNC_LIMIT=20</strong> modified notes → for each: GET content, <code>extractEdgesFromNote()</code>, <code>reconcileExtract()</code>: DELETE old extract edges, INSERT desired edges, UPSERT node → update watermark → drain degrees.<br/>
+            <span style="color: var(--text-faint);">1-hour cooldown · force bypasses</span>
+          </div>
+        </div>
+        <div class="df-detail-panel" data-flow="ingest">
+          <div class="flow-step-detail">
+            <strong style="color: var(--purple);">POST /api/ingest-triples</strong> with <code>{s, r, o}</code> triples → chunked <strong>33 at a time</strong> → <code>applyOps(add_edge, origin="ingest_triples")</code> — vault_ops logs with origin, vault_edges materialized → <code>drainDegrees()</code>.<br/>
+            <span style="color: var(--text-faint);">Max 2000 triples per call · automation pipeline primary consumer</span>
+          </div>
+        </div>
+        <div class="df-detail-panel" data-flow="query">
+          <div class="flow-step-detail">
+            <strong style="color: var(--amber);">find_related(path, depth=2)</strong> → BFS traversal from seed node with four scoring adjustments:<br/>
+            • <strong>Hub dampening</strong> — degree &gt; 50 → weight × 50/degree<br/>
+            • <strong>Cluster diversity</strong> — vault_enrichment.cluster_id ensures spread<br/>
+            • <strong>Dormant dampening</strong> — DAMPENED_FOLDERS → 0.1× weight<br/>
+            • Exclude phantoms &amp; transcripts → <strong>Top 25 results</strong> by score
+          </div>
+        </div>
+        <div class="df-detail-panel" data-flow="score">
+          <div class="flow-step-detail">
+            <strong style="color: var(--rose);">Daily cron (05:00 UTC)</strong> runs 4 independent detectors against D1:<br/>
+            • <code>detectBridges()</code> — edges crossing cluster boundaries<br/>
+            • <code>detectAccessDivergence()</code> — high centrality but rarely accessed<br/>
+            • <code>detectCentralityShifts()</code> — PageRank delta &gt; 10% since last run<br/>
+            • <code>detectTagAnomalies()</code> — tags appearing in 4+ concepts with missing edges<br/>
+            Results written to R2 at <code>memory/high-signal/staging/&lt;ts&gt;.md</code>
+          </div>
+        </div>
+        <div class="df-detail-panel" data-flow="crdt">
+          <div class="flow-step-detail">
+            <strong style="color: var(--purple);">CRDT:</strong> <code>POST /api/sync-ops</code> with ULID watermark → exchange ops bidirectionally → <code>applyOps()</code> incoming ops.<br/>
+            <strong style="color: var(--purple);">Weekly enrichment:</strong> Louvain clustering → PageRank (10 iterations) → bridge detection → UPDATE vault_enrichment (pagerank, cluster_id, prev_pagerank) → <code>writeVaultSnapshot()</code> (nodes + edges as JSONL to R2)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MCP TOOLS ============ -->
+<div id="tools" class="page">
+  <h2 class="page-title">MCP Tools</h2>
+  <p class="page-sub">12+ tools registered on VaultMcpDO, mapped to the storage subsystems they touch</p>
+
+  <div class="tools-grid">
+
+    <div class="group-header" style="color: var(--green);">
+      <span class="group-name">Note CRUD</span>
+      <span class="group-line"></span>
+      <span class="group-count">8 tools</span>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">list_notes</div>
+      <div class="tool-desc">Paginated listing with folder filter</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_nodes</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">read_note</div>
+      <div class="tool-desc">Read markdown content, record access timestamp</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span> <span class="pill pill-amber">note_access</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">write_note</div>
+      <div class="tool-desc">Create or overwrite note + index into graph</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span> <span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_ops</span> <span class="pill pill-amber">vault_fts</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">append_note</div>
+      <div class="tool-desc">Append content + re-index edges</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span> <span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_ops</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">delete_note</div>
+      <div class="tool-desc">Remove from R2 + purge from graph</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span> <span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_fts</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">search_notes</div>
+      <div class="tool-desc">FTS5 full-text search with BM25 ranking</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_fts</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">list_folders</div>
+      <div class="tool-desc">Paginated folder listing from node paths</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_nodes</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--green);">get_frontmatter</div>
+      <div class="tool-desc">Parse YAML metadata without full note read</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span></div>
+    </div>
+
+    <div class="group-header" style="color: var(--amber);">
+      <span class="group-name">Graph Operations</span>
+      <span class="group-line"></span>
+      <span class="group-count">6 tools</span>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--amber);">build_graph</div>
+      <div class="tool-desc">Full rebuild: extract + finalize phases. 24h cooldown, force bypass.</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span> <span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_ops</span> <span class="pill pill-amber">vault_fts</span> <span class="pill pill-amber">meta</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--amber);">sync_graph</div>
+      <div class="tool-desc">Incremental update, processes 20 modified notes. 1h cooldown.</div>
+      <div class="tool-stores"><span class="pill pill-green">R2</span> <span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">meta</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--amber);">find_related</div>
+      <div class="tool-desc">BFS + hub dampening + cluster diversity. Returns top 25.</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_enrichment</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--amber);">expand_subgraph</div>
+      <div class="tool-desc">BFS to depth k, returns full JSON. Max 200 nodes.</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--amber);">graph_qa</div>
+      <div class="tool-desc">Traversal-based question evaluation over the graph</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_edges</span></div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--amber);">ingest_triples</div>
+      <div class="tool-desc">Insert (s, r, o) edges. Max 2000, chunked by 33.</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_ops</span></div>
+    </div>
+
+    <div class="group-header" style="color: var(--rose);">
+      <span class="group-name">Admin</span>
+      <span class="group-line"></span>
+      <span class="group-count">1 tool</span>
+    </div>
+
+    <div class="tool-card">
+      <div class="tool-name" style="color: var(--rose);">vault_health</div>
+      <div class="tool-desc">Hub nodes, orphans, cluster stats, phantom count, topic coverage</div>
+      <div class="tool-stores"><span class="pill pill-amber">vault_nodes</span> <span class="pill pill-amber">vault_edges</span> <span class="pill pill-amber">vault_enrichment</span></div>
+    </div>
+
+
+  </div>
+</div>
+
+
+<script>
+  function show(id, btn) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function selectFlow(el) {
+    const flow = el.dataset.flow;
+    // Update sidebar
+    document.querySelectorAll('.df-selector').forEach(s => s.classList.remove('active'));
+    el.classList.add('active');
+    // Update SVG paths
+    document.querySelectorAll('.df-path').forEach(p => p.classList.remove('active'));
+    const target = document.querySelector(`.df-path[data-flow="${flow}"]`);
+    if (target) target.classList.add('active');
+    // Update detail panel
+    document.querySelectorAll('.df-detail-panel').forEach(d => d.classList.remove('active'));
+    const detail = document.querySelector(`.df-detail-panel[data-flow="${flow}"]`);
+    if (detail) detail.classList.add('active');
+  }
+
+  // Initialize first flow as active
+  document.addEventListener('DOMContentLoaded', () => {
+    const first = document.querySelector('.df-path[data-flow="write"]');
+    if (first) first.classList.add('active');
+  });
+</script>
+
+</body>
+</html>

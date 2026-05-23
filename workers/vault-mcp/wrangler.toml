@@ -1,0 +1,50 @@
+name = "vault-mcp"
+main = "src/index.ts"
+workers_dev = false
+
+routes = [
+  { pattern = "vault.your-domain.com/*", zone_name = "your-domain.com" },
+  # Headless MCP host (service-token gated via CF Access).
+  # { pattern = "vault-svc.your-domain.com/*", zone_name = "your-domain.com" },
+  { pattern = "atlas.your-domain.com/*", zone_name = "your-domain.com" },
+]
+compatibility_date = "2026-04-08"
+compatibility_flags = ["nodejs_compat"]
+account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+
+[vars]
+UI_HOSTNAME = "your-atlas-domain.com"
+
+[[r2_buckets]]
+binding = "VAULT"
+bucket_name = "obsidian-vault"
+
+[[r2_buckets]]
+binding = "VAULT_SNAPSHOTS"
+bucket_name = "vault-snapshots"
+
+# Durable Object for MCP sessions
+[[durable_objects.bindings]]
+name = "VAULT_MCP"
+class_name = "VaultMcpDO"
+
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vault-graph"
+database_id = "YOUR_D1_DATABASE_ID"
+
+[triggers]
+crons = ["0 * * * *", "0 5 * * *", "0 6 * * SUN", "0 7 * * SUN"]  # Hourly orphan sweep + daily fast-score + weekly vault snapshot + weekly algorithm enrichment
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html", "**/*.css", "**/*.txt", "**/*.svg"]
+fallthrough = true
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VaultMcpDO"]

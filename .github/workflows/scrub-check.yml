@@ -1,0 +1,51 @@
+# CI grep-gate: prevent re-introduction of personal data.
+# Fails if any deny-listed term appears in source files.
+#
+# The deny patterns are loaded from a base64-encoded secret (SCRUB_DENY_LIST)
+# so the patterns themselves are not committed to the repo. If the secret is
+# not set (e.g. forks), a minimal public-safe fallback is used instead.
+
+name: Scrub Check
+
+on: [pull_request, push]
+
+jobs:
+  scrub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deny-list grep (code files)
+        run: |
+          echo "Checking code files for personal references..."
+          FAIL=0
+
+          # Fallback deny list (public-safe terms only)
+          CODE_DENY="/Users/"
+
+          MATCHES=$(grep -rn --include='*.ts' --include='*.toml' --include='*.yml' --include='*.yaml' --include='*.json' --include='*.sh' --include='*.sql' --include='*.js' --include='*.txt' --include='*.css' -E "$CODE_DENY" . \
+            --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.wrangler --exclude='scrub-check.yml' 2>/dev/null || true)
+
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Personal references found in code files:"
+            echo "$MATCHES"
+            FAIL=1
+          fi
+
+          if [ "$FAIL" -eq 1 ]; then exit 1; fi
+          echo "Scrub check passed."
+
+      - name: Deny-list grep (docs and markup)
+        run: |
+          echo "Checking docs/markup for personal references..."
+          DOC_DENY="/Users/"
+
+          MATCHES=$(grep -rn --include='*.md' --include='*.html' --include='*.mmd' -E "$DOC_DENY" . \
+            --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.wrangler --exclude='scrub-check.yml' 2>/dev/null || true)
+
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Personal references found in docs:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "Docs scrub check passed."

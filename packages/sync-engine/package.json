@@ -1,0 +1,45 @@
+{
+  "name": "vault-graph-sync-engine",
+  "version": "0.1.0",
+  "description": "R2 ⇄ vault bidirectional sync engine. Bucket-as-source-of-truth file replication with ETag-based change detection.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "PROVENANCE.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@smithy/node-http-handler": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/multimail-dev/cartographer-pub",
+    "directory": "packages/sync-engine"
+  },
+  "keywords": [
+    "r2",
+    "cloudflare",
+    "sync",
+    "obsidian",
+    "vault"
+  ],
+  "license": "MIT",
+  "private": false
+}

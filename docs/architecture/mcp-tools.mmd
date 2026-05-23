@@ -1,0 +1,97 @@
+```mermaid
+graph LR
+    subgraph mcp["VaultMcpDO — MCP Server (12+ tools)"]
+        direction TB
+
+        subgraph crud["Note CRUD"]
+            list_notes["list_notes<br/><i>Paginated listing, folder filter</i>"]
+            read_note["read_note<br/><i>Read markdown, record access</i>"]
+            write_note["write_note<br/><i>Create/overwrite + index in graph</i>"]
+            append_note["append_note<br/><i>Append content + re-index</i>"]
+            delete_note["delete_note<br/><i>Remove from R2 + graph</i>"]
+            search_notes["search_notes<br/><i>FTS5 full-text search (BM25)</i>"]
+            list_folders["list_folders<br/><i>Paginated folder listing</i>"]
+            get_frontmatter["get_frontmatter<br/><i>YAML metadata (cheap read)</i>"]
+        end
+
+        subgraph graph["Graph Operations"]
+            build_graph["build_graph<br/><i>Full rebuild: extract + finalize</i><br/><i>24h cooldown, force bypass</i>"]
+            sync_graph["sync_graph<br/><i>Incremental update (20 notes)</i><br/><i>1h cooldown, force bypass</i>"]
+            find_related["find_related<br/><i>BFS + hub dampening</i><br/><i>cluster diversity, 25 results</i>"]
+            expand_subgraph["expand_subgraph<br/><i>BFS to depth k, full JSON</i><br/><i>max 200 nodes</i>"]
+            graph_qa["graph_qa<br/><i>Traversal-based Q&A eval</i>"]
+            ingest_triples["ingest_triples<br/><i>Insert (s, r, o) edges</i><br/><i>max 2000, chunked by 33</i>"]
+        end
+
+        subgraph admin["Admin & Diagnostics"]
+            vault_health["vault_health<br/><i>hubs, orphans, clusters,</i><br/><i>stats, phantoms, topics</i>"]
+        end
+
+    end
+
+    subgraph subsystems["Subsystems Accessed"]
+        direction TB
+        r2[("R2<br/>obsidian-vault")]
+        d1_nodes[("D1: vault_nodes")]
+        d1_edges[("D1: vault_edges")]
+        d1_ops[("D1: vault_ops")]
+        d1_fts[("D1: vault_fts")]
+        d1_access[("D1: note_access")]
+        d1_enrichment[("D1: vault_enrichment")]
+        d1_meta[("D1: meta<br/>ingest_runs")]
+    end
+
+    %% CRUD connections
+    list_notes --> d1_nodes
+    read_note --> r2
+    read_note --> d1_access
+    write_note --> r2
+    write_note --> d1_nodes
+    write_note --> d1_edges
+    write_note --> d1_ops
+    write_note --> d1_fts
+    append_note --> r2
+    append_note --> d1_nodes
+    append_note --> d1_edges
+    append_note --> d1_ops
+    delete_note --> r2
+    delete_note --> d1_nodes
+    delete_note --> d1_edges
+    delete_note --> d1_fts
+    search_notes --> d1_fts
+    list_folders --> d1_nodes
+    get_frontmatter --> r2
+
+    %% Graph connections
+    build_graph --> r2
+    build_graph --> d1_nodes
+    build_graph --> d1_edges
+    build_graph --> d1_ops
+    build_graph --> d1_fts
+    build_graph --> d1_meta
+    sync_graph --> r2
+    sync_graph --> d1_nodes
+    sync_graph --> d1_edges
+    sync_graph --> d1_ops
+    sync_graph --> d1_meta
+    find_related --> d1_nodes
+    find_related --> d1_edges
+    find_related --> d1_enrichment
+    expand_subgraph --> d1_nodes
+    expand_subgraph --> d1_edges
+    graph_qa --> d1_nodes
+    graph_qa --> d1_edges
+    ingest_triples --> d1_edges
+    ingest_triples --> d1_ops
+
+    %% Admin connections
+    vault_health --> d1_nodes
+    vault_health --> d1_edges
+    vault_health --> d1_enrichment
+
+    style mcp fill:#e8f0fe,stroke:#4a6cf7
+    style crud fill:#e8f5e9,stroke:#4caf50
+    style graph fill:#fff3e0,stroke:#ff9800
+    style admin fill:#fce4ec,stroke:#e91e63
+    style subsystems fill:#f5f5f5,stroke:#9e9e9e
+```

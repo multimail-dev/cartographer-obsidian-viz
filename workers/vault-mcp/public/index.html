@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cartographer — an atlas of your mind</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    // Power-mode bootstrap — point the cartographer bundle at this origin so
+    // /api/graph/nodes + /api/graph/edges are fetched from vault-mcp, not
+    // from a hypothetical local dev server.
+    const u = new URLSearchParams(window.location.search);
+    if (!u.has("power")) {
+      u.set("power", window.location.origin);
+      window.history.replaceState(null, "", "?" + u.toString());
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <div id="view-tabs" class="hidden">
+      <button id="tab-graph" class="view-tab active" type="button">Graph</button>
+      <button id="tab-datalab" class="view-tab" type="button">Data Lab</button>
+    </div>
+
+    <div id="data-lab" class="hidden">
+      <div class="datalab-toolbar">
+        <input id="datalab-filter" type="text" placeholder="Filter visible rows" autocomplete="off" spellcheck="false">
+        <button id="datalab-export" type="button">Export CSV</button>
+      </div>
+      <div class="datalab-table-wrap">
+        <table id="datalab-table">
+          <thead>
+            <tr>
+              <th data-col="label" class="sortable">Label <span class="sort-arrow"></span></th>
+              <th data-col="type" class="sortable">Type <span class="sort-arrow"></span></th>
+              <th data-col="folder" class="sortable">Folder <span class="sort-arrow"></span></th>
+              <th data-col="degree" class="sortable">Degree <span class="sort-arrow"></span></th>
+              <th data-col="pagerank" class="sortable">PageRank <span class="sort-arrow"></span></th>
+              <th data-col="community" class="sortable">Community <span class="sort-arrow"></span></th>
+              <th data-col="component" class="sortable">Component <span class="sort-arrow"></span></th>
+              <th data-col="clustering" class="sortable">Clustering <span class="sort-arrow"></span></th>
+              <th data-col="betweenness" class="sortable">Betweenness <span class="sort-arrow"></span></th>
+              <th data-col="eigenvector" class="sortable">Eigenvector <span class="sort-arrow"></span></th>
+              <th data-col="hubs" class="sortable">HITS Hub <span class="sort-arrow"></span></th>
+              <th data-col="wordCount" class="sortable">Words <span class="sort-arrow"></span></th>
+              <th data-col="modified" class="sortable">Modified <span class="sort-arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="datalab-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="sigma-container"></div>
+
+    <div id="filter-overlay" class="filter-overlay hidden" role="search" aria-label="Find in graph" aria-hidden="true">
+      <span class="filter-overlay-icon">⌕</span>
+      <input id="filter-input" type="text" placeholder="Find in graph" autocomplete="off" spellcheck="false">
+      <span id="filter-hint" class="filter-hint hidden"></span>
+    </div>
+
+    <div id="canvas-controls" class="canvas-controls hidden" aria-label="Graph canvas controls">
+      <div class="canvas-control-group">
+        <label class="control-label" for="depth-slider">Depth</label>
+        <span id="depth-value" class="mono-pill">1 hop</span>
+        <input id="depth-slider" type="range" min="1" max="3" step="1" value="1">
+      </div>
+      <div class="canvas-control-group">
+        <label class="control-label" for="layout-select">Layout</label>
+        <select id="layout-select" class="layout-select">
+          <option value="fa3">ForceAtlas 3</option>
+          <option value="fruchterman">Fruchterman-Reingold</option>
+          <option value="circular">Circular</option>
+          <option value="concentric">Concentric</option>
+          <option value="grid">Grid</option>
+          <option value="random">Random</option>
+          <option value="noverlap">Noverlap (post-process)</option>
+        </select>
+        <p id="layout-tooltip" class="layout-tooltip">Force-directed layout for exploring local structure. Use it to surface clusters and bridge notes.</p>
+      </div>
+    </div>
+
+    <div id="empty-state" class="center-card">
+      <!-- Compass rose — cartographic empty state per docs/design/atlas-handoff.html.
+           Replaces the teaser-node placeholder graph that previously sat on top
+           of where the real graph renders. -->
+      <svg class="empty-compass" viewBox="0 0 140 140" aria-hidden="true" focusable="false">
+        <circle cx="70" cy="70" r="64" fill="none" stroke="currentColor" stroke-opacity="0.18" />
+        <circle cx="70" cy="70" r="44" fill="none" stroke="currentColor" stroke-opacity="0.12" />
+        <circle cx="70" cy="70" r="24" fill="none" stroke="currentColor" stroke-opacity="0.1" />
+        <line x1="70" y1="6" x2="70" y2="134" stroke="currentColor" stroke-opacity="0.12" />
+        <line x1="6" y1="70" x2="134" y2="70" stroke="currentColor" stroke-opacity="0.12" />
+        <line x1="22" y1="22" x2="118" y2="118" stroke="currentColor" stroke-opacity="0.06" />
+        <line x1="22" y1="118" x2="118" y2="22" stroke="currentColor" stroke-opacity="0.06" />
+        <polygon points="70,12 66,70 74,70" fill="var(--accent)" fill-opacity="0.85" />
+        <polygon points="70,128 66,70 74,70" fill="currentColor" fill-opacity="0.35" />
+        <text x="70" y="3" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--accent)" letter-spacing="0.2em">N</text>
+      </svg>
+      <div class="empty-state-copy">
+        <div class="eyebrow">Cartographer · an atlas of your mind</div>
+        <h1>Search a note to reveal its structural neighborhood.</h1>
+        <p class="empty-lede">Map how ideas cluster, which notes dominate attention, and where isolated pockets of knowledge still need links.</p>
+        <div class="empty-stats" aria-label="Vault metrics">
+          <div class="empty-stat">
+            <span class="empty-stat-value" id="empty-stat-nodes">10k+</span>
+            <span class="empty-stat-label">notes</span>
+          </div>
+          <div class="empty-stat">
+            <span class="empty-stat-value" id="empty-stat-edges">126k+</span>
+            <span class="empty-stat-label">edges</span>
+          </div>
+          <div class="empty-stat">
+            <span class="empty-stat-value" id="empty-stat-communities">4k+</span>
+            <span class="empty-stat-label">communities</span>
+          </div>
+        </div>
+        <div class="empty-actions">
+          <button id="empty-search-button" type="button">Open Search</button>
+          <button id="empty-full-graph-button" type="button">View Full Graph</button>
+          <div class="empty-shortcut">
+            <span>Shortcut</span>
+            <kbd>⌘K</kbd>
+            <span class="kbd-plus">/</span>
+            <kbd>Ctrl+K</kbd>
+          </div>
+        </div>
+        <div class="empty-examples">
+          <span class="empty-examples-label">Try searches like</span>
+          <button type="button" class="empty-example" data-example-query="identity">identity</button>
+          <button type="button" class="empty-example" data-example-query="ritual">ritual</button>
+          <button type="button" class="empty-example" data-example-query="memory">memory</button>
+          <button type="button" class="empty-example" data-example-query="systems">systems</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="top-bar">
+      <div class="topbar-section topbar-brand">
+        <button id="sidebar-toggle" type="button" aria-label="Toggle left sidebar" title="Toggle sidebar (Cmd+\)">&#8249;</button>
+        <div class="brand-lockup">
+          <strong class="brand-title">Cartographer</strong>
+          <span class="brand-eyebrow">an atlas of your mind</span>
+        </div>
+      </div>
+
+      <div id="topbar-meta" class="topbar-section topbar-meta" aria-label="Graph metrics">
+        <span class="topbar-meta-item"><span class="glyph glyph-ochre" aria-hidden="true">◈</span> <span id="meta-notes">—</span> notes</span>
+        <span class="topbar-meta-item"><span class="glyph glyph-teal" aria-hidden="true">∞</span> <span id="meta-edges">—</span> edges</span>
+        <span class="topbar-meta-item"><span class="glyph glyph-ochre" aria-hidden="true">◉</span> <span id="meta-communities">—</span> communities</span>
+      </div>
+
+      <div id="topbar-encoding-controls" class="topbar-section topbar-encoding-controls" aria-label="Graph encoding controls">
+        <button id="color-mode-btn" type="button" class="toggle-btn" title="Toggle between coloring nodes by note type or community cluster">Color: Type</button>
+        <button id="size-mode-btn" type="button" class="toggle-btn" title="Toggle between sizing nodes by PageRank centrality (structural importance) or degree (connection count)">Size: PageRank</button>
+      </div>
+
+      <div class="topbar-section topbar-controls">
+        <button id="search-trigger" type="button" aria-label="Search (Cmd+K)">
+          <span class="top-bar-search-icon">⌕</span>
+          <span class="top-bar-search-hint">Search the vault…</span>
+          <kbd>⌘K</kbd>
+        </button>
+      </div>
+    </div>
+
+    <aside id="left-sidebar" aria-label="Graph navigation">
+      <div class="sidebar-shell">
+        <section id="seed-focus" class="sidebar-section seed-focus" aria-labelledby="seed-focus-title">
+          <div class="card focus-card">
+            <div class="card-head">
+              <div class="focus-title">
+                <span class="eyebrow">Current Focus</span>
+                <h2 id="seed-focus-title" class="seed-name">No seed selected</h2>
+              </div>
+              <button id="clear-seed" type="button" class="focus-clear hidden" aria-label="Clear graph and return to empty state">×</button>
+              <div id="seed-signal-badge" class="signal-badge hidden">
+                <span id="seed-signal-text">—</span>
+              </div>
+            </div>
+            <p id="seed-description" class="seed-note">Search for a note to explore its neighborhood.</p>
+            <div id="seed-metrics" class="why-grid hidden">
+              <div class="metric-tile"><span class="mini-label">PageRank</span><span id="metric-pagerank" class="metric-value">—</span><span id="metric-pagerank-detail" class="metric-detail"></span></div>
+              <div class="metric-tile"><span class="mini-label">Degree</span><span id="metric-degree" class="metric-value">—</span><span id="metric-degree-detail" class="metric-detail"></span></div>
+              <div class="metric-tile"><span class="mini-label">Community</span><span id="metric-community" class="metric-value">—</span><span id="metric-community-detail" class="metric-detail"></span></div>
+              <div class="metric-tile"><span class="mini-label">Bridge Score</span><span id="metric-bridge" class="metric-value">—</span><span id="metric-bridge-detail" class="metric-detail"></span></div>
+            </div>
+            <div id="seed-story" class="story-strip hidden">
+              <div class="story-row"><span class="story-mark"></span><div><strong>Why this matters</strong><span id="story-why">—</span></div></div>
+              <div class="story-row"><span class="story-mark story-mark-teal"></span><div><strong>What to inspect next</strong><span id="story-next">—</span></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="community-section" class="sidebar-section hidden" aria-labelledby="community-title">
+          <div class="card">
+            <div class="card-head">
+              <div><span class="eyebrow">Community Pressure</span><h3 id="community-title">Where the neighborhood clusters</h3></div>
+              <span id="community-count-badge" class="mini-label">—</span>
+            </div>
+            <div id="community-list" class="community-list" role="list"></div>
+          </div>
+        </section>
+
+        <section id="trail-section" class="sidebar-section hidden" aria-labelledby="trail-title">
+          <div class="card">
+            <div class="card-head">
+              <div><span class="eyebrow">Recent Explorations</span><h3 id="trail-title">Session trail</h3></div>
+              <span id="trail-count-badge" class="mini-label">—</span>
+            </div>
+            <div id="trail-list" class="trail-list" role="list"></div>
+          </div>
+        </section>
+
+        <section id="readout-section" class="sidebar-section hidden" aria-labelledby="readout-title">
+          <div class="card">
+            <div class="card-head">
+              <div><span class="eyebrow">Visible Graph</span><h3 id="readout-title">Structural readout</h3></div>
+            </div>
+            <div class="stats-grid">
+              <div class="stats-box"><span class="mini-label">Density</span><strong id="readout-density">—</strong></div>
+              <div class="stats-box"><span class="mini-label">Avg path</span><strong id="readout-avg-path">—</strong></div>
+              <div class="stats-box"><span class="mini-label">Components</span><strong id="readout-components">—</strong></div>
+              <div class="stats-box"><span class="mini-label">Peripheral</span><strong id="readout-peripheral">—</strong></div>
+            </div>
+            <ul id="readout-highlights" class="stats-list" role="list"></ul>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <div id="search-modal" class="modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Search notes">
+      <div class="modal-scrim" data-close-search="true"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div class="modal-heading">
+            <span class="modal-kicker">Vault Search</span>
+            <span class="modal-title">Find a seed note</span>
+          </div>
+          <button id="search-close" type="button" aria-label="Close search">×</button>
+        </div>
+        <div class="modal-search-row">
+          <input id="search-input" type="text" placeholder="Search notes, tags, or frontmatter" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="search-results"></div>
+      </div>
+    </div>
+
+    <aside id="detail-panel" class="hidden" aria-hidden="true" role="complementary" aria-label="Note details">
+      <div class="inspector-tabs" role="tablist" aria-label="Inspector tabs">
+        <button id="inspector-tab-note" class="inspector-tab active" role="tab" type="button" data-inspector-tab="note" aria-selected="true" aria-controls="detail-body">Note</button>
+        <button id="inspector-tab-neighbors" class="inspector-tab" role="tab" type="button" data-inspector-tab="neighbors" aria-selected="false" aria-controls="detail-body">Neighbors</button>
+        <button id="inspector-tab-bridges" class="inspector-tab" role="tab" type="button" data-inspector-tab="bridges" aria-selected="false" aria-controls="detail-body">Bridges</button>
+        <button id="inspector-tab-hubs" class="inspector-tab" role="tab" type="button" data-inspector-tab="hubs" aria-selected="false" aria-controls="detail-body">Hubs</button>
+      </div>
+      <div id="detail-header" class="detail-header">
+        <div class="detail-heading">
+          <div id="detail-type" class="detail-kicker"></div>
+          <h2 id="detail-title"></h2>
+        </div>
+        <button id="detail-close" type="button" aria-label="Close detail panel">×</button>
+      </div>
+      <div id="detail-actions" class="detail-actions">
+        <button id="detail-pin" type="button" class="detail-action-btn">Pin this note</button>
+        <a id="detail-link" class="detail-link" href="#" target="_blank" rel="noreferrer">Open in Obsidian</a>
+      </div>
+      <div id="detail-meta" class="detail-meta"></div>
+      <div id="detail-body" class="detail-body" role="tabpanel" aria-labelledby="inspector-tab-note"></div>
+    </aside>
+
+    <section id="bottom-dock" class="bottom-dock hidden" aria-label="Edge legend">
+      <div class="dock-summary">
+        <div class="dock-summary-left">
+          <h2 class="dock-title">Edges</h2>
+          <span class="dock-blurb" id="dock-blurb">—</span>
+        </div>
+        <div class="dock-kpis" id="dock-kpis"></div>
+        <button id="dock-toggle" type="button" aria-expanded="false" aria-controls="dock-panel">
+          <span>Expand legend</span>
+          <span class="toggle-chevron" aria-hidden="true">▾</span>
+        </button>
+      </div>
+      <div id="dock-panel" class="dock-panel" role="region" aria-label="Edge type details">
+        <div id="dock-legend-grid" class="dock-legend-grid" role="list"></div>
+      </div>
+    </section>
+
+    <div id="status-bar">
+      <span id="status-summary">Loading graph…</span>
+      <span id="status-layout">Layout idle</span>
+      <span id="status-enrichment" aria-live="polite"></span>
+    </div>
+  </div>
+
+  <script type="module" src="/dist/app.js"></script>
+
+  <!-- Atlas PR 5: populate status-enrichment from /api/meta build timestamp.
+       One-shot fetch on DOMContentLoaded, no observers, no retry loops. -->
+  <script>
+    (function atlasStatusFooter() {
+      function fmtBuild(epochMs) {
+        if (!epochMs) return "";
+        const d = new Date(epochMs);
+        if (Number.isNaN(d.getTime())) return "";
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(d.getUTCDate()).padStart(2, "0");
+        const hh = String(d.getUTCHours()).padStart(2, "0");
+        const mm = String(d.getUTCMinutes()).padStart(2, "0");
+        return `build ${y}-${m}-${day} ${hh}:${mm}`;
+      }
+      const el = document.getElementById("status-enrichment");
+      if (!el) return;
+      fetch("/api/meta", { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((meta) => {
+          if (!meta) return;
+          const label = fmtBuild(meta.lastReload);
+          if (label) el.textContent = label;
+        })
+        .catch(() => { /* soft-fail — status footer stays blank */ });
+    })();
+  </script>
+</body>
+</html>

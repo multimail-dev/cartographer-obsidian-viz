@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vault": {
+      "url": "https://your-domain.com/mcp",
+      "transport": "sse"
+    }
+  }
+}

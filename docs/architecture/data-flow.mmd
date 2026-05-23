@@ -1,0 +1,93 @@
+```mermaid
+sequenceDiagram
+    participant User as User / Agent
+    participant R2 as R2: obsidian-vault
+    participant Worker as vault-mcp Worker
+    participant D1 as D1: vault-graph
+
+    Note over R2,D1: === Note Creation / Update ===
+
+    User->>Worker: write_note(path, content)
+    Worker->>R2: PUT markdown file
+    Worker->>Worker: extractEdgesFromNote(path, content)
+    Note right of Worker: Extracts: wikilinks, tags,<br/>frontmatter (speakers, concepts),<br/>aliases, note metadata
+    Worker->>D1: applyOps([add_edge, upsert_node])
+    Note right of D1: vault_ops (audit log)<br/>vault_edges (materialized)<br/>vault_nodes (metadata)
+    Worker->>D1: drainDegrees() — recompute in/out_degree
+    Worker->>D1: toolFindRelated() — return neighborhood
+    Worker-->>User: { neighborhood suggestions }
+
+    Note over R2,D1: === Full Graph Rebuild (buildGraph) ===
+
+    User->>Worker: build_graph(phase="extract")
+    loop 200 notes per page
+        Worker->>R2: LIST + GET (batch of 5)
+        Worker->>Worker: extractEdgesFromNote() per note
+        Worker->>D1: UPSERT vault_nodes + applyOps(edges)
+        Worker->>D1: INSERT/UPDATE vault_fts (FTS5)
+    end
+    Worker-->>User: { progress, cursor, done: false }
+
+    User->>Worker: build_graph(phase="finalize")
+    Worker->>D1: Add folder edges (same-folder pairs)
+    Worker->>D1: Add temporal edges (±7 day proximity)
+    Worker->>D1: Add tag_cooccurrence edges (2+ shared tags)
+    Worker->>D1: drainDegrees() — final degree computation
+    Worker->>D1: Stale cleanup (remove old ingest_run_id rows)
+    Worker-->>User: { done: true, nodes, edges }
+
+    Note over R2,D1: === Incremental Sync (syncGraph) ===
+
+    User->>Worker: sync_graph(force?)
+    Worker->>D1: drainDegrees() — pick up prior writers' work
+    Worker->>R2: LIST since __last_sync__ watermark
+    loop Up to SYNC_LIMIT=20 modified notes
+        Worker->>R2: GET note content
+        Worker->>Worker: extractEdgesFromNote()
+        Worker->>D1: reconcileExtract — DELETE old extract edges,<br/>INSERT desired edges, UPSERT node
+    end
+    Worker->>D1: Update __last_sync__ watermark
+    Worker->>D1: drainDegrees() — recompute affected degrees
+    Worker-->>User: { modified, upserted, deleted }
+
+    Note over R2,D1: === Triple Ingestion (Automation Pipeline) ===
+
+    User->>Worker: POST /api/ingest-triples<br/>{ triples: [{s, r, o}, ...] }
+    loop 33 triples per chunk
+        Worker->>D1: applyOps(add_edge, origin="ingest_triples")
+        Note right of D1: vault_ops logs with origin<br/>vault_edges materialized
+    end
+    Worker->>D1: drainDegrees()
+    Worker-->>User: { ingested, skipped, total }
+
+    Note over R2,D1: === Query Path (findRelated) ===
+
+    User->>Worker: find_related(path, depth=2)
+    Worker->>D1: SELECT edges WHERE source/target = seed
+    Note right of Worker: BFS traversal:<br/>- Hub dampening (degree > 50 → 50/degree)<br/>- Cluster diversity (vault_enrichment.cluster_id)<br/>- Dormant dampening (DAMPENED_FOLDERS → 0.1x)<br/>- Exclude phantoms & transcripts
+    Worker->>D1: SELECT cluster_id FROM vault_enrichment
+    Worker-->>User: Top 25 results { path, score, depth }
+
+    Note over R2,D1: === Fast Score (Cron / API) ===
+
+    Worker->>D1: detectBridges() — cross-cluster edges
+    Worker->>D1: detectAccessDivergence() — high centrality + low access
+    Worker->>D1: detectCentralityShifts() — PageRank delta > 10%
+    Worker->>D1: detectTagAnomalies() — tags in 4+ concepts, missing edges
+    Worker->>R2: PUT memory/high-signal/staging/<ts>.md
+    Worker-->>User: { candidates, by_type, top_candidates }
+
+    Note over R2,D1: === CRDT Sync (Phase 3) ===
+
+    User->>Worker: POST /api/sync-ops<br/>{ ops, watermark (ULID), limit }
+    Worker->>D1: SELECT vault_ops WHERE ulid > watermark
+    Worker->>D1: applyOps(received ops)
+    Worker-->>User: { ops (outbound), watermark, has_more }
+
+    Note over R2,D1: === Weekly Enrichment ===
+
+    Worker->>D1: runAlgorithmEnrichment()
+    Note right of Worker: Louvain clustering<br/>PageRank (10 iterations)<br/>Bridge detection
+    Worker->>D1: UPDATE vault_enrichment<br/>(pagerank, cluster_id, prev_pagerank)
+    Worker->>R2: writeVaultSnapshot()<br/>(nodes + edges as JSONL)
+```

@@ -1,0 +1,29 @@
+{
+  "name": "vault-graph",
+  "private": true,
+  "packageManager": "bun@1.2.0",
+  "workspaces": [
+    "workers/*",
+    "packages/*",
+    "apps/*"
+  ],
+  "dependencies": {
+    "graphology": "0.25.4",
+    "graphology-layout": "0.6.1",
+    "graphology-layout-forceatlas2": "0.10.1",
+    "graphology-types": "0.24.8",
+    "gray-matter": "4.0.3",
+    "marked": "12",
+    "sigma": "3.0.2"
+  },
+  "scripts": {
+    "build:atlas-ui": "bun run --filter @vault-graph/atlas-ui build",
+    "build": "bun run --filter @vault-graph/contract build && bun run --filter vault-graph-sync-engine build && bun run build:atlas-ui && bun run --filter @vault-graph/vault-mcp build",
+    "local": "bun apps/atlas-ui/serve.ts",
+    "deploy:dry": "bun run --filter @vault-graph/vault-mcp deploy:dry",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

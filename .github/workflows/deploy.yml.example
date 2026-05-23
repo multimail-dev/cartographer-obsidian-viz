@@ -1,0 +1,43 @@
+# Example deploy workflow -- copy to deploy.yml and configure secrets.
+#
+# Required GitHub Secrets:
+#   CLOUDFLARE_API_TOKEN -- Cloudflare API token with Workers/D1/R2/KV permissions
+#
+# Optional:
+#   Replace YOUR_ATLAS_DOMAIN with your actual domain for the smoke test.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Deploy
+        run: npx wrangler deploy -c workers/vault-mcp/wrangler.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # Optional: smoke test after deploy
+      # - name: Smoke test
+      #   run: |
+      #     sleep 5
+      #     curl -sf https://YOUR_ATLAS_DOMAIN/ || exit 1

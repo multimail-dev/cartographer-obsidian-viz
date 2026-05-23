@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.0
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Fail fast on broken tests before spending CI time on build/deploy:dry.
+      # workers/vault-mcp/scripts/test.sh splits tests into two bun processes
+      # (grep -rl 'mock.module' partitions files needing module-mock isolation
+      # from files needing clean module registry).
+      - name: Run tests
+        run: bash workers/vault-mcp/scripts/test.sh
+
+      - name: Typecheck workspace (includes build:atlas-ui)
+        run: bun run build
+
+      # HTML + CSS are deterministic file copies and should never drift.
+      # JS bundles are skipped because bun's minifier isn't bit-reproducible
+      # across machines (CI vs local); the CI build above already overwrites
+      # them, and deploy.yml always rebuilds fresh before deploy.
+      - name: Verify no HTML/CSS source drift
+        run: git diff --exit-code -- workers/vault-mcp/public/index.html workers/vault-mcp/public/style.css
+
+      # Note: deploy:dry requires real Cloudflare resource IDs in wrangler.toml.
+      # Contributors should run `bun run build` locally to verify typechecks pass.
