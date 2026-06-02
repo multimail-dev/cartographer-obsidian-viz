@@ -1,0 +1,12 @@
+.DS_Store
+.dev.vars
+.mcp.json
+dist/
+node_modules/
+__structural_neighbors__.json
+*.png
+.playwright-mcp/
+.codesearch.db/
+.ouroboros/
+test-results/
+video/

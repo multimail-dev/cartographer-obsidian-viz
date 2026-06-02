@@ -1,0 +1,12 @@
+{
+  "name": "@vault-graph/atlas-ui",
+  "version": "0.1.0",
+  "description": "Cartographer / Atlas UI - Sigma.js graph explorer for local Obsidian vaults.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/frontend/app.ts src/frontend/fa3-worker.ts --outdir public/dist --target browser --minify",
+    "bench": "bun run bench/layout.ts",
+    "test": "bun test tests/"
+  }
+}

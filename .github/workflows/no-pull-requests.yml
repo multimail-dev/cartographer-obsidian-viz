@@ -1,0 +1,21 @@
+name: Pull requests are not accepted
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  close:
+    name: Close pull request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Redirect contributor to issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr close "$PR_URL" --comment "Thanks for the interest. This repository does not accept pull requests. Please open an issue with the proposed change or problem report instead."
