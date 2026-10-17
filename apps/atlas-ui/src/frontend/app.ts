@@ -1,5 +1,5 @@
 import Graph from "graphology";
-import { marked } from "marked";
+import { renderNoteMarkdown } from "./note-markdown";
 import Sigma from "sigma";
 import type { Attributes } from "graphology-types";
 import {
@@ -2388,15 +2388,6 @@ function renderInspectorTab(): void {
   }
 }
 
-function prepareWikilinks(markdown: string): string {
-  return markdown.replace(/\[\[([^\]\|\n]+?)(?:\|([^\]\n]+?))?\]\]/g, (_match, target: string, label?: string) => {
-    const normalizedTarget = target.trim();
-    const normalizedLabel = (label ?? target).trim();
-    if (!normalizedTarget) return _match;
-    return `<a href="[[${escapeHtml(normalizedTarget)}]]">${escapeHtml(normalizedLabel || normalizedTarget)}</a>`;
-  });
-}
-
 function resolveWikilinkTarget(rawTarget: string): string | null {
   const target = rawTarget.trim().replace(/^#*/, "");
   if (!target) return null;
@@ -2444,8 +2435,7 @@ function renderNoteTab(): void {
     elements.detailBody.innerHTML = `<div class="detail-empty-state">This note is empty.</div>`;
     return;
   }
-  const html = marked.parse(prepareWikilinks(md), { breaks: true, gfm: true, async: false }) as string;
-  elements.detailBody.innerHTML = html;
+  elements.detailBody.replaceChildren(renderNoteMarkdown(md));
   elements.detailBody.querySelectorAll<HTMLAnchorElement>("a[href^='[[']").forEach(wikilinkHandler);
 }
 

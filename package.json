@@ -12,7 +12,8 @@
     "graphology-types": "0.24.8",
     "yaml": "2.9.1",
     "marked": "12",
-    "sigma": "3.0.2"
+    "sigma": "3.0.2",
+    "dompurify": "3.4.17"
   },
   "scripts": {
     "build:atlas-ui": "bun run --filter @vault-graph/atlas-ui build",
