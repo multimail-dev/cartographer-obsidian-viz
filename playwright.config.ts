@@ -22,9 +22,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "python3 -m http.server 4173 --bind 127.0.0.1 --directory apps/atlas-ui/public",
+    command: "node tests/e2e/serve.mjs",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },
 });

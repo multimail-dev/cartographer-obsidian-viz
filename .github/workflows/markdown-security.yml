@@ -8,6 +8,7 @@ on:
       - "apps/atlas-ui/src/frontend/**"
       - "tests/e2e/**"
       - "package.json"
+      - "playwright.config.ts"
       - ".github/workflows/markdown-security.yml"
 
 permissions:
@@ -26,4 +27,4 @@ jobs:
       - run: bun test apps/atlas-ui/tests/
       - run: bun run build
       - run: bunx playwright install --with-deps chromium
-      - run: bunx playwright test tests/e2e/atlas-ui.spec.ts --grep "note Markdown"
+      - run: bunx playwright test tests/e2e/atlas-ui.spec.ts

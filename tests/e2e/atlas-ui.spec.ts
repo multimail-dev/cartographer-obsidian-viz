@@ -123,9 +123,9 @@ async function installAtlasMocks(page: Page, markdown?: string): Promise<void> {
         body: JSON.stringify(body),
       });
 
-    if (url.pathname === "/api/graph/nodes") {
+    if (url.pathname === "/api/graph") {
       await json({
-        items: atlasNodes.map((node) => ({
+        nodes: atlasNodes.map((node, index) => ({
           id: node.id,
           title: node.title,
           folder: node.folder,
@@ -138,25 +138,20 @@ async function installAtlasMocks(page: Page, markdown?: string): Promise<void> {
           contentHash: null,
           embeddingVersion: null,
           ingestRunId: null,
-          x: null,
-          y: null,
+          x: index % 2,
+          y: Math.floor(index / 2),
           body: null,
           pagerank: node.pagerank,
           clusterId: node.clusterId,
           componentId: node.componentId,
           clusteringCoeff: node.clusteringCoeff,
         })),
-        nextCursor: null,
-        total: atlasNodes.length,
-      });
-      return;
-    }
-
-    if (url.pathname === "/api/graph/edges") {
-      await json({
-        items: atlasEdges,
-        nextCursor: null,
-        total: atlasEdges.length,
+        edges: atlasEdges.map((edge) => ({
+          source: edge.sourceId,
+          target: edge.targetId,
+          type: edge.edgeType,
+          weight: edge.weight,
+        })),
       });
       return;
     }
