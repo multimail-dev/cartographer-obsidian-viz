@@ -1,5 +1,5 @@
 import { readFile, stat } from "fs/promises";
-import matter from "gray-matter";
+import { parse as parseYaml } from "yaml";
 import type { VaultNote } from "./types";
 
 const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]*)?\s*(?:\|[^\]]*)?\]\]/g;
@@ -38,9 +38,20 @@ export async function parseVault(vaultPath: string): Promise<VaultNote[]> {
       let fm: Record<string, unknown> = {};
       let body = text;
       try {
-        const parsed = matter(text);
-        fm = parsed.data;
-        body = parsed.content;
+        // Only exact YAML delimiters are accepted; language suffixes stay plain text.
+        const opening = /^(?:\uFEFF)?---\r?\n/.exec(text);
+        if (opening) {
+          const rest = text.slice(opening[0].length);
+          const closing = /^---(?:\r?\n|$)/m.exec(rest);
+          if (closing) {
+            const data: unknown = parseYaml(rest.slice(0, closing.index));
+            if (data !== null && (typeof data !== "object" || Array.isArray(data))) {
+              throw new Error("Frontmatter must be a YAML mapping");
+            }
+            fm = (data as Record<string, unknown> | null) ?? {};
+            body = rest.slice(closing.index + closing[0].length);
+          }
+        }
       } catch {
         // Malformed frontmatter — treat entire file as body
       }
