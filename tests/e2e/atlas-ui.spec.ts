@@ -101,7 +101,7 @@ const noteBodies: Record<string, string> = {
   "atlas/maps": "# Map Pressure\n\nMapping pressure reveals bridge notes.",
 };
 
-async function installAtlasMocks(page: Page): Promise<void> {
+async function installAtlasMocks(page: Page, markdown?: string): Promise<void> {
   await page.addInitScript(() => {
     class NoopEventSource {
       addEventListener(): void {}
@@ -222,7 +222,7 @@ async function installAtlasMocks(page: Page): Promise<void> {
       await route.fulfill({
         status: 200,
         contentType: "text/plain; charset=utf-8",
-        body: noteBodies[path] ?? "# Missing note\n\nNo fixture exists for this path.",
+        body: markdown ?? noteBodies[path] ?? "# Missing note\n\nNo fixture exists for this path.",
       });
       return;
     }
@@ -424,4 +424,102 @@ test("audits accessibility-facing CSS: dark color scheme, reduced motion, and co
     expect(check.missing, `${check.selector} should exist for the contrast audit`).toBe(false);
     expect(check.ratio, `${check.selector} contrast ratio`).toBeGreaterThanOrEqual(check.min);
   }
+});
+
+async function openMarkdownFixture(page: Page, markdown: string): Promise<void> {
+  await page.addInitScript(() => { (window as any).__noteXss = 0; });
+  await installAtlasMocks(page, markdown);
+  await page.goto("/?seed=atlas/memory");
+  await expect(page.locator("#detail-body")).toContainText("Security fixture");
+}
+
+test("note Markdown strips active HTML, namespaces, and dangerous attributes", async ({ page }) => {
+  await openMarkdownFixture(page, [
+    "# Security fixture", "",
+    '<script>window.__noteXss = 1</script>',
+    '<img src="/missing-note-image" onerror="window.__noteXss = 1">',
+    '<svg onload="window.__noteXss = 1"><a xlink:href="javascript:window.__noteXss=1">SVG</a></svg>',
+    '<math><mtext><img src=x onerror="window.__noteXss=1"></mtext></math>',
+    '<iframe srcdoc="<script>parent.__noteXss=1</script>"></iframe>',
+    '<object data="data:text/html,active"></object>',
+    '<form action="javascript:window.__noteXss=1"><input autofocus onfocus="window.__noteXss=1"></form>',
+    '<a href="https://example.com" onclick="window.__noteXss=1" style="color:red" id="app" name="app">safe label</a>',
+  ].join("\n\n"));
+  const body = page.locator("#detail-body");
+  await expect(body.locator("script, svg, math, iframe, object, embed, form, input, style")).toHaveCount(0);
+  const unsafeAttributes = await body.evaluate((element) =>
+    [...element.querySelectorAll("*")].flatMap((node) =>
+      [...node.attributes].filter((attr) =>
+        /^on/i.test(attr.name) || ["style", "srcdoc", "action", "id", "name", "xlink:href"].includes(attr.name)
+      ).map((attr) => attr.name)
+    )
+  );
+  expect(unsafeAttributes).toEqual([]);
+  // Exercise any surviving image error events instead of relying on a timeout.
+  await body.locator("img").evaluateAll((images) => {
+    images.forEach((image) => image.dispatchEvent(new Event("error")));
+  });
+  expect(await page.evaluate(() => (window as any).__noteXss)).toBe(0);
+});
+
+test("note Markdown rejects active and obfuscated link and image schemes", async ({ page }) => {
+  await openMarkdownFixture(page, [
+    "# Security fixture", "",
+    "[JS](javascript:window.__noteXss=1)",
+    "[mixed](JaVaScRiPt:window.__noteXss=1)",
+    "[data](data:text/html,active)",
+    "[vbscript](vbscript:msgbox)",
+    '[entity](java&#x73;cript:window.__noteXss=1)',
+    '<a href="&#106;avascript:window.__noteXss=1">encoded</a>',
+    '<a href="java&#x09;script:window.__noteXss=1">tab</a>',
+    '<a href="java&#x0A;script:window.__noteXss=1">newline</a>',
+    '<a href="  javascript:window.__noteXss=1">spaces</a>',
+    '<a href="file:///etc/passwd">file</a>',
+    '<a href="obsidian://open">unhandled scheme</a>',
+    '![data image](data:image/svg+xml,active)',
+    '<img src="data:image/png;base64,AAAA">',
+    '<img src="javascript:window.__noteXss=1">',
+  ].join("\n\n"));
+  const body = page.locator("#detail-body");
+  await expect(body.locator("[href], [src]")).toHaveCount(0);
+  // Removed destinations remain readable and clicking their labels is inert.
+  await body.getByText("encoded", { exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__noteXss)).toBe(0);
+  expect(new URL(page.url()).pathname).toBe("/");
+});
+
+test("note Markdown preserves formatting, safe destinations, and escaped wikilink navigation", async ({ page }) => {
+  await openMarkdownFixture(page, [
+    "# Security fixture", "",
+    "**bold** and *emphasis* and ~~deleted~~", "",
+    "- list item", "",
+    "> quote", "",
+    "| Column |\n| --- |\n| Value |", "",
+    "`<img onerror=active>`", "",
+    "[HTTPS](https://example.com/docs) [HTTP](http://example.com) [mail](mailto:reader@example.com) [relative](/docs) [fragment](#section)", "",
+    '![safe image](https://example.com/image.png "image title")', "",
+    '[[atlas/ritual|<img src=x onerror=active>]]',
+  ].join("\n"));
+  const body = page.locator("#detail-body");
+  await expect(body.locator("strong")).toHaveText("bold");
+  await expect(body.locator("em")).toHaveText("emphasis");
+  await expect(body.locator("del")).toHaveText("deleted");
+  await expect(body.locator("li")).toHaveText("list item");
+  await expect(body.locator("blockquote")).toContainText("quote");
+  await expect(body.locator("td")).toHaveText("Value");
+  await expect(body.locator("code")).toHaveText("<img onerror=active>");
+  for (const [label, href] of [
+    ["HTTPS", "https://example.com/docs"], ["HTTP", "http://example.com"],
+    ["mail", "mailto:reader@example.com"], ["relative", "/docs"], ["fragment", "#section"],
+  ]) {
+    await expect(body.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", href);
+  }
+  await expect(body.locator("img")).toHaveCount(1);
+  await expect(body.locator("img")).toHaveAttribute("src", "https://example.com/image.png");
+  const wiki = body.locator("a.note-wikilink");
+  await expect(wiki).toHaveText("<img src=x onerror=active>");
+  await expect(wiki).toHaveAttribute("href", "[[atlas/ritual]]");
+  await wiki.click();
+  await expect(page.locator("#detail-title")).toHaveText("Ritual Loop");
+  expect(await page.evaluate(() => (window as any).__noteXss)).toBe(0);
 });
